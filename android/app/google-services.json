@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "643414683551",
-    "project_id": "pbl7-2a6ad",
-    "storage_bucket": "pbl7-2a6ad.firebasestorage.app"
+    "project_number": "590512658734",
+    "project_id": "app-pbl7",
+    "storage_bucket": "app-pbl7.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:643414683551:android:95758a964e145ea83157aa",
+        "mobilesdk_app_id": "1:590512658734:android:2f0279dd1e59e66c9f02bf",
         "android_client_info": {
           "package_name": "com.example.app_pbl_7"
         }
@@ -15,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDAvQbA3fcPHmeeZZ6457_QNb4O7FLtMn4"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:643414683551:android:46dbe6bb19bbfaaa3157aa",
-        "android_client_info": {
-          "package_name": "com.example.pbl7"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDAvQbA3fcPHmeeZZ6457_QNb4O7FLtMn4"
+          "current_key": "AIzaSyCK6QUWhgT474WeRHG5GRZBpSR0f_nT69k"
         }
       ],
       "services": {
