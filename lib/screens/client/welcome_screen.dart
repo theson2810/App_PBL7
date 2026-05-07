@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../localization/app_localization.dart';
+import '../../models/auth_models.dart';
+import '../../providers/auth_provider.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  final VoidCallback onLogin;
-
-  const WelcomeScreen({super.key, required this.onLogin});
+  const WelcomeScreen({super.key});
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -17,22 +19,100 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  UserType _selectedRole = UserType.familyMember;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
+    
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (mounted) {
-      setState(() => _isLoading = false);
-      widget.onLogin();
+    
+    try {
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.login(
+        _emailCtrl.text.trim(),
+        _passCtrl.text,
+      );
+      
+      if (mounted) {
+        if (authProvider.isAuthenticated) {
+          // Navigation happens in AuthGate based on user type
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(authProvider.error ?? 'Đăng nhập thất bại')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final userTypeString = _selectedRole == UserType.admin ? 'admin' : 'familyMember';
+      
+      final request = RegistrationRequest(
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text,
+        fullName: _nameCtrl.text.trim(),
+        userType: userTypeString,
+        phone: _phoneCtrl.text.isNotEmpty ? _phoneCtrl.text : null,
+      );
+      
+      await authProvider.register(request);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đăng ký thành công! Vui lòng xác nhận email'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Clear fields and switch back to login
+        setState(() {
+          _showLogin = true;
+          _emailCtrl.clear();
+          _passCtrl.clear();
+          _nameCtrl.clear();
+          _phoneCtrl.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -85,9 +165,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'AI-Powered Elderly Care Monitoring',
-                      style: TextStyle(
+                    Text(
+                      AppLocalizations.of(context).translate('login_description'),
+                      style: const TextStyle(
                         color: Colors.white60,
                         fontSize: 13,
                       ),
@@ -189,57 +269,22 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         isLoading: _isLoading,
                         onTogglePassword: () =>
                             setState(() => _showPassword = !_showPassword),
-                        onLogin: _login,
+                        onLogin: _handleLogin,
                         onForgotPassword: () => _showForgotPassword(context),
                       )
-                    : _RegisterForm(onRegister: () {
-                        setState(() => _showLogin = true);
-                      }),
-              ),
-
-              // Social login
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            'Or continue with',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textTertiary,
-                            ),
-                          ),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onLogin,
-                            icon: const Icon(Icons.g_mobiledata_rounded, size: 22),
-                            label: const Text('Google'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onLogin,
-                            icon: const Icon(Icons.apple_rounded, size: 20),
-                            label: const Text('Apple'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                    : _RegisterForm(
+                        formKey: _formKey,
+                        nameCtrl: _nameCtrl,
+                        emailCtrl: _emailCtrl,
+                        phoneCtrl: _phoneCtrl,
+                        passCtrl: _passCtrl,
+                        isLoading: _isLoading,
+                        selectedRole: _selectedRole,
+                        onRoleChanged: (role) {
+                          setState(() => _selectedRole = role);
+                        },
+                        onRegister: _handleRegister,
+                      ),
               ),
             ],
           ),
@@ -414,77 +459,141 @@ class _LoginForm extends StatelessWidget {
 }
 
 class _RegisterForm extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController nameCtrl;
+  final TextEditingController emailCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController passCtrl;
+  final bool isLoading;
+  final UserType selectedRole;
+  final Function(UserType) onRoleChanged;
   final VoidCallback onRegister;
 
-  const _RegisterForm({required this.onRegister});
+  const _RegisterForm({
+    required this.formKey,
+    required this.nameCtrl,
+    required this.emailCtrl,
+    required this.phoneCtrl,
+    required this.passCtrl,
+    required this.isLoading,
+    required this.selectedRole,
+    required this.onRoleChanged,
+    required this.onRegister,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Create Account',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: AppTheme.textPrimary,
+    return Form(
+      key: formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Create Account',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Join the Vital Horizon monitoring network',
-          style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
-        ),
-        const SizedBox(height: 20),
-        const TextField(
-          decoration: InputDecoration(
-            labelText: 'Full Name',
-            prefixIcon: Icon(Icons.person_outline_rounded),
+          const SizedBox(height: 4),
+          const Text(
+            'Join the Vital Horizon network',
+            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(
-            labelText: 'Email Address',
-            prefixIcon: Icon(Icons.email_outlined),
+          const SizedBox(height: 20),
+          
+          // Role selector
+          const Text(
+            'Account Type',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          keyboardType: TextInputType.phone,
-          decoration: InputDecoration(
-            labelText: 'Phone Number',
-            prefixIcon: Icon(Icons.phone_outlined),
+          const SizedBox(height: 8),
+          SegmentedButton<UserType>(
+            segments: const [
+              ButtonSegment(
+                value: UserType.familyMember,
+                label: Text('Family Member'),
+                icon: Icon(Icons.people_outline),
+              ),
+              ButtonSegment(
+                value: UserType.admin,
+                label: Text('Administrator'),
+                icon: Icon(Icons.admin_panel_settings_outlined),
+              ),
+            ],
+            selected: {selectedRole},
+            onSelectionChanged: (selection) {
+              if (selection.isNotEmpty) {
+                onRoleChanged(selection.first);
+              }
+            },
           ),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: 'Password',
-            prefixIcon: Icon(Icons.lock_outline_rounded),
+          const SizedBox(height: 20),
+
+          TextFormField(
+            controller: nameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Full Name',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
+            validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
           ),
-        ),
-        const SizedBox(height: 12),
-        const TextField(
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: 'Confirm Password',
-            prefixIcon: Icon(Icons.lock_outline_rounded),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'Email Address',
+              prefixIcon: Icon(Icons.email_outlined),
+            ),
+            validator: (v) => v == null || v.isEmpty ? 'Email is required' : null,
           ),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: onRegister,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: phoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number (Optional)',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
           ),
-          child: const Text('Create Account →'),
-        ),
-      ],
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: passCtrl,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Password',
+              prefixIcon: Icon(Icons.lock_outline_rounded),
+              helperText: 'Min. 6 characters',
+            ),
+            validator: (v) =>
+                v == null || v.length < 6 ? 'Password must be at least 6 characters' : null,
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: isLoading ? null : onRegister,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+              textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            child: isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text('Create Account →'),
+          ),
+        ],
+      ),
     );
   }
 }

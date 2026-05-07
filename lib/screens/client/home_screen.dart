@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../localization/app_localization.dart';
 import 'live_view_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -15,10 +16,10 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryDark,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Vital Horizon',
               style: TextStyle(
                 color: Colors.white,
@@ -27,8 +28,8 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             Text(
-              'The Clinical Sentinel',
-              style: TextStyle(color: Colors.white60, fontSize: 11),
+              AppLocalizations.of(context).translate('app_name_server'),
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
             ),
           ],
         ),
@@ -47,14 +48,14 @@ class HomeScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white30),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 14),
-                  SizedBox(width: 4),
+                  const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 14),
+                  const SizedBox(width: 4),
                   Text(
-                    'Server',
-                    style: TextStyle(
+                    AppLocalizations.of(context).switchServer,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,

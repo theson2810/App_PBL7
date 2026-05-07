@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../localization/app_localization.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -33,18 +34,18 @@ class _AlertsScreenState extends State<AlertsScreen>
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: const Color(0xFFB71C1C),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Security & Vital Alerts',
-              style: TextStyle(
+              AppLocalizations.of(context).alertsTitle,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            Text(
+            const Text(
               'Recent detections — Safety is our priority',
               style: TextStyle(color: Colors.white70, fontSize: 11),
             ),

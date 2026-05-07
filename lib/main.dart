@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
-import 'screens/server/server_app.dart';
-import 'screens/client/client_app.dart';
+import 'localization/app_localization.dart';
+import 'localization/language_provider.dart';
+import 'providers/auth_provider.dart';
+import 'screens/auth_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,32 +25,44 @@ class ElderlyCareApp extends StatefulWidget {
 }
 
 class _ElderlyCareAppState extends State<ElderlyCareApp> {
-  bool _isServerApp = true;
+  late LanguageProvider _languageProvider;
 
-  void _switchApp() {
-    setState(() => _isServerApp = !_isServerApp);
+  @override
+  void initState() {
+    super.initState();
+    _languageProvider = LanguageProvider();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: _isServerApp ? 'Clinical Sentinel' : 'Vital Horizon',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.theme,
-      home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 350),
-        transitionBuilder: (child, animation) {
-          return FadeTransition(opacity: animation, child: child);
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => _languageProvider),
+      ],
+      child: ListenableBuilder(
+        listenable: _languageProvider,
+        builder: (context, _) {
+          return MaterialApp(
+            title: 'Elderly Care Monitor',
+            debugShowCheckedModeBanner: false,
+            locale: _languageProvider.locale,
+            localizationsDelegates: const [
+              AppLocalizationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en'),
+              Locale('vi'),
+            ],
+            theme: AppTheme.theme,
+            home: AuthGate(
+              languageProvider: _languageProvider,
+            ),
+          );
         },
-        child: _isServerApp
-            ? ServerApp(
-                key: const ValueKey('server'),
-                onSwitchApp: _switchApp,
-              )
-            : ClientApp(
-                key: const ValueKey('client'),
-                onSwitchApp: _switchApp,
-              ),
       ),
     );
   }

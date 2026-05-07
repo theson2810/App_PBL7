@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../models/models.dart';
+import '../../models/auth_models.dart';
 import '../../widgets/common_widgets.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../providers/auth_provider.dart';
 
-class ProfileScreen extends StatefulWidget {
+class AdminProfileScreen extends StatefulWidget {
   final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
   final VoidCallback? onLogout;
 
-  const ProfileScreen({
+  const AdminProfileScreen({
     super.key,
     required this.onSwitchApp,
     required this.languageProvider,
@@ -19,12 +21,14 @@ class ProfileScreen extends StatefulWidget {
   });
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<AdminProfileScreen> createState() => _AdminProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _AdminProfileScreenState extends State<AdminProfileScreen> {
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    
     return ListenableBuilder(
       listenable: widget.languageProvider,
       builder: (context, _) {
@@ -34,7 +38,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               children: [
                 // Profile header
-                _ProfileHeader(onSwitchApp: widget.onSwitchApp),
+                _ProfileHeader(
+                  user: user,
+                  onSwitchApp: widget.onSwitchApp,
+                ),
 
                 // Content
                 Padding(
@@ -42,10 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Aegis Premium banner
-                      _PremiumBanner(),
-                      const SizedBox(height: 16),
-
                       // Account settings
                       SectionHeader(title: AppLocalizations.of(context).translate('personal_info')),
                       _SettingsGroup(
@@ -53,46 +56,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _SettingsItem(
                             icon: Icons.person_outline_rounded,
                             label: 'Personal Information',
-                            subtitle: 'Eleanor Vance · eleanor@vitalhorizon.com',
+                            subtitle: user?.email ?? 'admin@example.com',
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.phonelink_rounded,
-                            label: 'Shared Devices',
-                            subtitle: 'Manage connected health monitors',
+                            icon: Icons.badge_outlined,
+                            label: 'Account Type',
+                            subtitle: 'Administrator',
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.group_outlined,
-                            label: 'Family Members',
-                            subtitle: 'Complete your security circle',
-                            trailing: StatusBadge.green('3'),
+                            icon: Icons.family_restroom_rounded,
+                            label: 'Family Code',
+                            subtitle: user?.familyCode ?? 'FAM-XXXXXXXX',
+                            trailing: IconButton(
+                              icon: const Icon(Icons.copy_rounded, size: 18),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Copied: ${user?.familyCode}',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            onTap: () {},
+                          ),
+                          _SettingsItem(
+                            icon: Icons.phone_outlined,
+                            label: 'Contact',
+                            subtitle: user?.phone ?? 'Not set',
                             onTap: () {},
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 4),
-                      const SectionHeader(title: 'Monitoring'),
+                      const SectionHeader(title: 'System'),
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
-                            icon: Icons.notifications_active_outlined,
-                            label: 'Alert Preferences',
-                            subtitle: 'Push, SMS & email settings',
+                            icon: Icons.security_rounded,
+                            label: 'Permissions',
+                            subtitle: 'Full system access',
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.schedule_rounded,
-                            label: 'Monitoring Schedule',
-                            subtitle: '24/7 continuous monitoring',
-                            trailing: StatusBadge.green('ON'),
-                            onTap: () {},
-                          ),
-                          _SettingsItem(
-                            icon: Icons.speed_rounded,
-                            label: 'AI Sensitivity',
-                            subtitle: 'Detection threshold: Medium',
+                            icon: Icons.history_rounded,
+                            label: 'Activity Log',
+                            subtitle: 'View system changes',
                             onTap: () {},
                           ),
                         ],
@@ -121,19 +134,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.security_rounded,
-                            label: 'Privacy & Security',
-                            subtitle: '2FA enabled · Data encrypted',
-                            trailing: StatusBadge.green('Secure'),
-                            onTap: () {},
-                          ),
-                          _SettingsItem(
-                            icon: Icons.help_outline_rounded,
-                            label: 'Help & Support',
-                            subtitle: 'FAQ, guides & contact support',
-                            onTap: () {},
-                          ),
-                          _SettingsItem(
                             icon: Icons.info_outline_rounded,
                             label: 'About',
                             subtitle: 'Version 1.0.0 · Clinical Sentinel',
@@ -148,7 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _SettingsItem(
                             icon: Icons.logout_rounded,
                             label: 'Logout',
-                            subtitle: 'Sign out of Vital Horizon',
+                            subtitle: 'Sign out of the system',
                             iconColor: AppTheme.errorColor,
                             labelColor: AppTheme.errorColor,
                             showArrow: false,
@@ -178,7 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         content: const Text(
-          'Are you sure you want to log out? You will stop receiving real-time alerts.',
+          'Are you sure you want to log out from the admin panel?',
           style: TextStyle(fontSize: 13, height: 1.5),
         ),
         actions: [
@@ -189,7 +189,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<AuthProvider>().logout();
               widget.onLogout?.call();
             },
             style: ElevatedButton.styleFrom(
@@ -204,9 +203,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
+  final UserAccount? user;
   final VoidCallback onSwitchApp;
 
-  const _ProfileHeader({required this.onSwitchApp});
+  const _ProfileHeader({
+    required this.user,
+    required this.onSwitchApp,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +230,7 @@ class _ProfileHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Profile',
+                'Admin Profile',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
@@ -266,7 +269,7 @@ class _ProfileHeader extends StatelessWidget {
                           ),
                           SizedBox(width: 4),
                           Text(
-                            'Server',
+                            'User',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -286,10 +289,10 @@ class _ProfileHeader extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 36,
-                backgroundColor: Colors.white.withOpacity(0.15),
-                child: const Text(
-                  'EV',
-                  style: TextStyle(
+                backgroundColor: user?.avatarColor ?? Colors.white.withOpacity(0.15),
+                child: Text(
+                  user?.initials ?? 'AD',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -316,147 +319,21 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Eleanor Vance',
-            style: TextStyle(
+          Text(
+            user?.fullName ?? 'Administrator',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'eleanor@vitalhorizon.com',
-            style: TextStyle(
+          Text(
+            user?.email ?? 'admin@example.com',
+            style: const TextStyle(
               color: Colors.white60,
               fontSize: 12,
             ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ProfileStat(label: 'Cameras', value: '4'),
-              _ProfileStatDivider(),
-              _ProfileStat(label: 'Alerts', value: '127'),
-              _ProfileStatDivider(),
-              _ProfileStat(label: 'Days Active', value: '42'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileStat extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _ProfileStat({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileStatDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 28,
-      width: 1,
-      color: Colors.white24,
-    );
-  }
-}
-
-class _PremiumBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryDark,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.primaryLight.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.shield_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Aegis Premium',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Your health history is secured with end-to-end protection everywhere.',
-                  style: TextStyle(
-                    color: Color(0xFF81C784),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          TextButton(
-            onPressed: () {},
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.primaryLight,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              backgroundColor: AppTheme.primaryLight.withOpacity(0.15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                  color: AppTheme.primaryLight.withOpacity(0.4),
-                ),
-              ),
-            ),
-            child: const Text('View', style: TextStyle(fontSize: 11)),
           ),
         ],
       ),

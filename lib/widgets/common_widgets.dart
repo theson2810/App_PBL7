@@ -654,3 +654,76 @@ class GreenBannerCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Language Switcher Widget ──────────────────────────────
+class LanguageSwitcher extends StatelessWidget {
+  final bool isVietnamese;
+  final VoidCallback onToggle;
+
+  const LanguageSwitcher({
+    super.key,
+    required this.isVietnamese,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primaryContainer),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _LanguageButton(
+            label: 'EN',
+            isSelected: !isVietnamese,
+            onTap: !isVietnamese ? null : onToggle,
+          ),
+          _LanguageButton(
+            label: 'VN',
+            isSelected: isVietnamese,
+            onTap: isVietnamese ? null : onToggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageButton extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  const _LanguageButton({
+    required this.label,
+    required this.isSelected,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : AppTheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}

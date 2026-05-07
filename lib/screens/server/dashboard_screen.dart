@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../localization/language_provider.dart';
+import '../../models/models.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onSwitchApp;
+  final LanguageProvider languageProvider;
 
-  const DashboardScreen({super.key, required this.onSwitchApp});
+  const DashboardScreen({
+    super.key,
+    required this.onSwitchApp,
+    required this.languageProvider,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -15,7 +21,6 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
@@ -24,7 +29,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(_pulseController);
   }
 
   @override
@@ -35,7 +39,10 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ListenableBuilder(
+      listenable: widget.languageProvider,
+      builder: (context, _) {
+        return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryDark,
@@ -99,7 +106,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // System status banner
-              _SystemStatusBanner(pulseAnim: _pulseAnim),
+              _SystemStatusBanner(
+                pulseAnim: _pulseController,
+              ),
               const SizedBox(height: 14),
 
               // Stat grid
@@ -185,6 +194,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
         ),
       ),
+        );
+      },
     );
   }
 }

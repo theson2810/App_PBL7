@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../localization/app_localization.dart';
+import '../widgets/add_family_dialog.dart';
 
 class FamilyScreen extends StatefulWidget {
   const FamilyScreen({super.key});
@@ -58,7 +60,32 @@ class _FamilyScreenState extends State<FamilyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Invite button
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddMemberDialog(),
+                    icon: const Icon(Icons.person_add_outlined, size: 18),
+                    label: const Text('Add Member'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 46),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showJoinFamilyDialog(),
+                    icon: const Icon(Icons.group_add_outlined, size: 18),
+                    label: const Text('Join Family'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Invite button (legacy)
             ElevatedButton.icon(
               onPressed: _showInviteDialog,
               icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
@@ -181,6 +208,42 @@ class _FamilyScreenState extends State<FamilyScreen> {
           bottom: MediaQuery.of(ctx).viewInsets.bottom,
         ),
         child: const _InviteSheet(),
+      ),
+    );
+  }
+
+  void _showAddMemberDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AddFamilyDialog(
+        onAdd: (name, relation) {
+          final loc = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${loc.translate('family_added')}: $name'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // TODO: Add to family list
+        },
+      ),
+    );
+  }
+
+  void _showJoinFamilyDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => JoinFamilyDialog(
+        onJoin: (code) {
+          final loc = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(loc.translate('family_joined')),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // TODO: Validate and join family
+        },
       ),
     );
   }

@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../localization/app_localization.dart';
+import '../../localization/language_provider.dart';
 import 'dashboard_screen.dart';
 import 'camera_config_screen.dart';
 import 'family_screen.dart';
 import 'system_log_screen.dart';
+import 'admin_profile_screen.dart';
 
 class ServerApp extends StatefulWidget {
   final VoidCallback onSwitchApp;
+  final LanguageProvider languageProvider;
+  final VoidCallback? onLogout;
 
-  const ServerApp({super.key, required this.onSwitchApp});
+  const ServerApp({
+    super.key,
+    required this.onSwitchApp,
+    required this.languageProvider,
+    this.onLogout,
+  });
 
   @override
   State<ServerApp> createState() => _ServerAppState();
@@ -23,19 +33,32 @@ class _ServerAppState extends State<ServerApp> {
   void initState() {
     super.initState();
     _screens = [
-      DashboardScreen(onSwitchApp: widget.onSwitchApp),
+      DashboardScreen(
+        onSwitchApp: widget.onSwitchApp,
+        languageProvider: widget.languageProvider,
+      ),
       const CameraConfigScreen(),
       const FamilyScreen(),
       const SystemLogScreen(),
+      AdminProfileScreen(
+        onSwitchApp: widget.onSwitchApp,
+        languageProvider: widget.languageProvider,
+        onLogout: widget.onLogout,
+      ),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: ListenableBuilder(
+        listenable: widget.languageProvider,
+        builder: (context, _) {
+          return IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          );
+        },
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -60,26 +83,31 @@ class _ServerAppState extends State<ServerApp> {
           backgroundColor: Colors.white,
           elevation: 0,
           indicatorColor: AppTheme.primaryContainer,
-          destinations: const [
+          destinations: [
             NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard',
+              icon: const Icon(Icons.dashboard_outlined),
+              selectedIcon: const Icon(Icons.dashboard_rounded),
+              label: AppLocalizations.of(context).navDashboard,
             ),
             NavigationDestination(
-              icon: Icon(Icons.videocam_outlined),
-              selectedIcon: Icon(Icons.videocam_rounded),
-              label: 'Camera',
+              icon: const Icon(Icons.videocam_outlined),
+              selectedIcon: const Icon(Icons.videocam_rounded),
+              label: AppLocalizations.of(context).navCamera,
             ),
             NavigationDestination(
-              icon: Icon(Icons.group_outlined),
-              selectedIcon: Icon(Icons.group_rounded),
-              label: 'Family',
+              icon: const Icon(Icons.group_outlined),
+              selectedIcon: const Icon(Icons.group_rounded),
+              label: AppLocalizations.of(context).navFamily,
             ),
             NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long_rounded),
-              label: 'Logs',
+              icon: const Icon(Icons.receipt_long_outlined),
+              selectedIcon: const Icon(Icons.receipt_long_rounded),
+              label: AppLocalizations.of(context).navLogs,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outline),
+              selectedIcon: const Icon(Icons.person),
+              label: 'Profile',
             ),
           ],
         ),
