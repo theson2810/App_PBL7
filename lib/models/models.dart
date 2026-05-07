@@ -111,7 +111,7 @@ class FamilyMember {
 }
 
 final List<FamilyMember> mockFamilyMembers = [
-  FamilyMember(
+  const FamilyMember(
     id: 'f1',
     name: 'Sarah Mitchell',
     email: 'sarah@mitchell.com',
@@ -121,24 +121,24 @@ final List<FamilyMember> mockFamilyMembers = [
     avatarColor: AppColors.green50,
     initials: 'SM',
   ),
-  FamilyMember(
+  const FamilyMember(
     id: 'f2',
     name: 'David Chen',
     email: 'david.chen@mail.com',
     relationship: 'Son',
     role: MemberRole.viewer,
     status: MemberStatus.active,
-    avatarColor: const Color(0xFFE3F2FD),
+    avatarColor: Color(0xFFE3F2FD),
     initials: 'DC',
   ),
-  FamilyMember(
+  const FamilyMember(
     id: 'f3',
     name: 'lisa.roberts@gmail.com',
     email: 'lisa.roberts@gmail.com',
     relationship: 'Pending invite',
     role: MemberRole.viewer,
     status: MemberStatus.pending,
-    avatarColor: const Color(0xFFFFF8E1),
+    avatarColor: Color(0xFFFFF8E1),
     initials: 'LR',
   ),
 ];
