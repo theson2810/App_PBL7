@@ -1,59 +1,65 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../services/family_service.dart';
 import '../models/family_member_model.dart';
 
 class FamilyRepository {
   final FamilyService _familyService = FamilyService();
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-
-
-// CREATE FAMILY
 
   Future<String?> createFamily(String name) async {
     try {
       return await _familyService.createFamily(name);
     } catch (e) {
-      print("CREATE FAMILY ERROR: $e");
+      // ignore: avoid_print
+      print('CREATE FAMILY ERROR: $e');
       return null;
     }
   }
 
-
-// JOIN FAMILY BY CODE
   Future<String?> joinFamily(String code) async {
     try {
       return await _familyService.joinFamily(code);
     } catch (e) {
-      print("JOIN FAMILY ERROR: $e");
-      return null;
+      // ignore: avoid_print
+      print('JOIN FAMILY ERROR: $e');
+      rethrow;
     }
   }
 
-// GET FAMILY MEMBERS
-  Stream<List<FamilyMemberModel>> getMembers(String familyId) {
-    return _db
-      .collection('family_members')
-      .where('familyId', isEqualTo: familyId)
-      .snapshots()
-      .map((snapshot) => snapshot.docs
-      .map((doc) => FamilyMemberModel.fromFirestore(doc))
-      .toList());
-  }
+  Future<String> requestJoinFamily(String code) => _familyService.requestJoinFamily(code);
 
-// GET INVITE CODE
+  Stream<QuerySnapshot<Map<String, dynamic>>> joinRequests(String familyId) =>
+      _familyService.joinRequestsStream(familyId);
+
+  Future<void> acceptJoinRequest(String requestDocId) =>
+      _familyService.acceptJoinRequest(requestDocId);
+
+  Future<void> rejectJoinRequest(String requestDocId) =>
+      _familyService.rejectJoinRequest(requestDocId);
+
+  Future<Map<String, String>> inviteMemberByEmail(String familyId, String email) =>
+      _familyService.inviteMemberByEmail(familyId, email);
+
+  Future<void> acceptEmailInvite(String token) =>
+      _familyService.acceptEmailInvite(token);
+
+  Future<String?> getAdminFamilyId(String uid) => _familyService.getAdminFamilyId(uid);
+
+  Future<bool> isUserFamilyAdmin(String uid) => _familyService.isUserFamilyAdmin(uid);
+
+  Stream<List<FamilyMemberModel>> getMembers(String familyId) =>
+      _familyService.membersStream(familyId);
+
   Future<String?> getInviteCode(String familyId) async {
     try {
-      final query = await _db
-        .collection('invites')
-        .where('familyId', isEqualTo: familyId)
-        .limit(1)
-        .get();
-
-      if (query.docs.isEmpty) return null;
-      return query.docs.first['code'];
+      return await _familyService.getInviteCode(familyId);
     } catch (e) {
-      print("GET INVITE ERROR: $e");
+      // ignore: avoid_print
+      print('GET INVITE ERROR: $e');
       return null;
     }
   }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> myPendingJoinRequests() =>
+      _familyService.myPendingJoinRequestsStream();
 }

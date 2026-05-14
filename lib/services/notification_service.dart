@@ -24,11 +24,12 @@ class NotificationService {
   }
 
   Future<void> saveDeviceToken(String token) async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
     await FirebaseFirestore.instance
         .collection('users')
-        .doc(uid)
-        .update({'fcmToken': token});
+        .doc(user.uid)
+        .set({'fcmToken': token}, SetOptions(merge: true));
   }
 }

@@ -3,7 +3,7 @@ import '../../theme/app_theme.dart';
 import '../../localization/app_localization.dart';
 
 class AddFamilyDialog extends StatefulWidget {
-  final Function(String, String) onAdd; // onAdd(name, relation)
+  final void Function(String name, String email, String relation) onAdd;
 
   const AddFamilyDialog({
     super.key,
@@ -37,7 +37,11 @@ class _AddFamilyDialogState extends State<AddFamilyDialog> {
       return;
     }
 
-    widget.onAdd(_nameController.text, _relationController.text);
+    widget.onAdd(
+      _nameController.text.trim(),
+      _emailController.text.trim(),
+      _relationController.text,
+    );
     Navigator.pop(context);
   }
 
@@ -227,7 +231,7 @@ class _JoinFamilyDialogState extends State<JoinFamilyDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Enter the family code to join a family group',
+              'Nhập mã 6 số của nhóm hoặc Family ID (Firestore) để gửi yêu cầu tham gia. Admin sẽ duyệt.',
               style: TextStyle(
                 fontSize: 13,
                 color: AppTheme.textSecondary,
@@ -240,7 +244,7 @@ class _JoinFamilyDialogState extends State<JoinFamilyDialog> {
               controller: _codeController,
               decoration: InputDecoration(
                 labelText: loc.translate('family_code'),
-                hintText: 'e.g., FAM-12345678',
+                hintText: 'VD: 123456 hoặc Family ID',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

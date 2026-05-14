@@ -5,13 +5,17 @@ class FamilyModel {
   final String name;
   final String ownerId;
   final DateTime createdAt;
+  final String? joinCode;
 
   FamilyModel({
     required this.id,
     required this.name,
     required this.ownerId,
     required this.createdAt,
+    this.joinCode,
   });
+
+  String get adminUid => ownerId;
 
   factory FamilyModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -19,9 +23,10 @@ class FamilyModel {
     return FamilyModel(
       id: doc.id,
       name: data['name'] ?? '',
-      ownerId: data['ownerId'] ?? '',
+      ownerId: (data['adminUid'] ?? data['ownerId'] ?? '') as String,
       createdAt:
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      joinCode: data['joinCode'] as String?,
     );
   }
 
@@ -29,6 +34,8 @@ class FamilyModel {
     return {
       'name': name,
       'ownerId': ownerId,
+      'adminUid': ownerId,
+      if (joinCode != null) 'joinCode': joinCode,
       'createdAt': createdAt,
     };
   }
