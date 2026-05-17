@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/auth_models.dart';
 import '../services/auth_service.dart';
@@ -12,16 +14,13 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isAuthenticated = false;
-  String? _pendingVerificationEmail; // Track email waiting for verification
-  String? _testVerificationCode; // For testing - stores the verification code
+  String? _pendingVerificationEmail;
 
-  // Getters
   UserAccount? get user => _user;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _isAuthenticated;
   String? get pendingVerificationEmail => _pendingVerificationEmail;
-  String? get testVerificationCode => _testVerificationCode; // For testing
   AuthService get authService => _authService;
 
   // ─── Initialize Saved User (Persistent Login) ────────
@@ -35,7 +34,10 @@ class AuthProvider extends ChangeNotifier {
       
       if (savedUser != null) {
         _user = savedUser;
-        _isAuthenticated = true;
+        _isAuthenticated = savedUser.emailVerified;
+        // Nếu đã đăng nhập Firebase nhưng chưa xác thực email, đưa lại vào luồng xác thực.
+        _pendingVerificationEmail =
+            savedUser.emailVerified ? null : (savedUser.email.isNotEmpty ? savedUser.email : null);
         _isLoading = false;
         notifyListeners();
         return true;
@@ -63,7 +65,11 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.success) {
         _user = response.user;
-        _isAuthenticated = true;
+        final verified = response.user?.emailVerified ?? false;
+        _isAuthenticated = verified;
+        _pendingVerificationEmail = verified
+            ? null
+            : ((response.user?.email ?? '').isNotEmpty ? response.user!.email : null);
         _isLoading = false;
         notifyListeners();
         return true;
@@ -88,27 +94,30 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _authService.register(request);
+      final response = await _authService.register(request).timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => const AuthResponse(
+          success: false,
+          error:
+              'Hết thời gian chờ (90s). Kiểm tra mạng, Stop app rồi Run lại, hoặc thử máy thật.',
+        ),
+      );
 
       if (response.success) {
         _user = response.user;
-        _isAuthenticated = false; // NOT authenticated yet - waiting for email verification
-        _pendingVerificationEmail = request.email; // Store email for verification
-        _testVerificationCode = _user?.verificationCode; // Store code for testing
-        _isLoading = false;
-        notifyListeners();
+        _isAuthenticated = false;
+        _pendingVerificationEmail = request.email;
         return true;
       } else {
         _error = response.error ?? 'Registration failed';
-        _isLoading = false;
-        notifyListeners();
         return false;
       }
     } catch (e) {
       _error = e.toString();
+      return false;
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
@@ -121,6 +130,7 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _isAuthenticated = false;
     _error = null;
+    _pendingVerificationEmail = null;
     _isLoading = false;
     notifyListeners();
   }
@@ -129,6 +139,16 @@ class AuthProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  /// Reload Firestore user profile (e.g. after family join).
+  Future<void> refreshUserProfile() async {
+    final u = await _authService.refreshCurrentUserProfile();
+    if (u != null) {
+      _user = u;
+      _isAuthenticated = u.emailVerified;
+      notifyListeners();
+    }
   }
 
   // ─── Request Password Reset ───────────────────────────
@@ -170,8 +190,7 @@ class AuthProvider extends ChangeNotifier {
       if (response.success) {
         _user = response.user;
         _isAuthenticated = true; // Now authenticated after email verification
-        _pendingVerificationEmail = null; // Clear pending email
-        _testVerificationCode = null; // Clear test code
+        _pendingVerificationEmail = null;
         _isLoading = false;
         notifyListeners();
         return true;
@@ -200,64 +219,14 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.success) {
         _isLoading = false;
+        final u = await _authService.refreshCurrentUserProfile();
+        if (u != null) {
+          _user = u;
+        }
         notifyListeners();
         return true;
       } else {
         _error = response.error ?? 'Failed to resend verification code';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // ─── Verify Password Reset Code ────────────────────────
-  Future<bool> verifyPasswordResetCode(String email, String code) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final response = await _authService.verifyPasswordResetCode(email, code);
-
-      if (response.success) {
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = response.error ?? 'Password reset code verification failed';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // ─── Reset Password ────────────────────────────────────
-  Future<bool> resetPassword(String email, String code, String newPassword) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final response = await _authService.resetPassword(email, code, newPassword);
-
-      if (response.success) {
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = response.error ?? 'Password reset failed';
         _isLoading = false;
         notifyListeners();
         return false;

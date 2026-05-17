@@ -61,60 +61,71 @@ class _AuthGateState extends State<AuthGate> {
       );
     }
 
-    // Watch AuthProvider state
-    final authProvider = context.watch<AuthProvider>();
+    // Chỉ rebuild khi trạng thái *định tuyến* đổi — không watch toàn bộ AuthProvider
+    // (tránh rebuild khi _isLoading đăng ký/đăng nhập làm treo hoặc reset WelcomeScreen).
+    return Selector<AuthProvider, String>(
+      selector: (_, p) {
+        final pe = p.pendingVerificationEmail;
+        if (pe != null && pe.isNotEmpty) return 'verify|$pe';
+        if (p.isAuthenticated) {
+          final u = p.user;
+          if (u == null) return 'auth|null';
+          return 'auth|${u.id}|${u.userType.name}';
+        }
+        return 'welcome';
+      },
+      builder: (context, _, __) {
+        final authProvider = context.read<AuthProvider>();
 
-    // Check if user is pending email verification
-    if (authProvider.pendingVerificationEmail != null) {
-      return EmailVerificationScreen(
-        email: authProvider.pendingVerificationEmail!,
-      );
-    }
-
-    // Show authentication screen if not authenticated
-    if (!authProvider.isAuthenticated) {
-      return const WelcomeScreen();
-    }
-
-    // Show main app (server or client based on user type)
-    final user = authProvider.user;
-    if (user == null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              const Text('Loading...'),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  authProvider.logout();
-                },
-                child: const Text('Back to Login'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Determine which app to show based on user type
-    final isServerApp = user.userType == UserType.admin;
-
-    return isServerApp
-        ? ServerApp(
-            key: const ValueKey('server'),
-            onSwitchApp: () {},
-            languageProvider: widget.languageProvider,
-            onLogout: () => authProvider.logout(),
-          )
-        : ClientApp(
-            key: const ValueKey('client'),
-            onSwitchApp: () {},
-            languageProvider: widget.languageProvider,
-            onLogout: () => authProvider.logout(),
+        if (authProvider.pendingVerificationEmail != null) {
+          return EmailVerificationScreen(
+            email: authProvider.pendingVerificationEmail!,
           );
+        }
+
+        if (!authProvider.isAuthenticated) {
+          return const WelcomeScreen();
+        }
+
+        final user = authProvider.user;
+        if (user == null) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  const Text('Loading...'),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: () {
+                      authProvider.logout();
+                    },
+                    child: const Text('Back to Login'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final isServerApp = user.userType == UserType.admin;
+
+        return isServerApp
+            ? ServerApp(
+                key: const ValueKey('server'),
+                onSwitchApp: () {},
+                languageProvider: widget.languageProvider,
+                onLogout: () => authProvider.logout(),
+              )
+            : ClientApp(
+                key: const ValueKey('client'),
+                onSwitchApp: () {},
+                languageProvider: widget.languageProvider,
+                onLogout: () => authProvider.logout(),
+              );
+      },
+    );
   }
 }

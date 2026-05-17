@@ -41,14 +41,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     
     try {
       final authProvider = context.read<AuthProvider>();
-      await authProvider.login(
+      final ok = await authProvider.login(
         _emailCtrl.text.trim(),
         _passCtrl.text,
       );
-      
+
       if (mounted) {
-        if (authProvider.isAuthenticated) {
-          // Navigation happens in AuthGate based on user type
+        if (ok && authProvider.isAuthenticated) {
+          // AuthGate chuyển sang app chính
+        } else if (ok && authProvider.pendingVerificationEmail != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đăng nhập thành công. Vui lòng xác thực email để tiếp tục.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(authProvider.error ?? 'Đăng nhập thất bại')),
@@ -85,23 +92,31 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         phone: _phoneCtrl.text.isNotEmpty ? _phoneCtrl.text : null,
       );
       
-      await authProvider.register(request);
-      
+      final ok = await authProvider.register(request);
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đăng ký thành công! Vui lòng xác nhận email'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // Clear fields and switch back to login
-        setState(() {
-          _showLogin = true;
-          _emailCtrl.clear();
-          _passCtrl.clear();
-          _nameCtrl.clear();
-          _phoneCtrl.clear();
-        });
+        if (ok) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đăng ký thành công! Vui lòng xác nhận email'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // AuthGate có thể chuyển sang màn xác thực — chỉ reset form khi vẫn ở welcome
+          if (authProvider.pendingVerificationEmail == null) {
+            setState(() {
+              _showLogin = true;
+              _emailCtrl.clear();
+              _passCtrl.clear();
+              _nameCtrl.clear();
+              _phoneCtrl.clear();
+            });
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(authProvider.error ?? 'Đăng ký thất bại')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -303,7 +318,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: const _ForgotPasswordSheet(),
+        child: _ForgotPasswordSheet(
+          initialEmail: _emailCtrl.text.trim(),
+        ),
       ),
     );
   }
@@ -598,51 +615,117 @@ class _RegisterForm extends StatelessWidget {
   }
 }
 
-class _ForgotPasswordSheet extends StatelessWidget {
-  const _ForgotPasswordSheet();
+class _ForgotPasswordSheet extends StatefulWidget {
+  final String initialEmail;
+
+  const _ForgotPasswordSheet({this.initialEmail = ''});
+
+  @override
+  State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
+}
+
+class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
+  late final TextEditingController _emailCtrl;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nhập email')),
+      );
+      return;
+    }
+    setState(() => _loading = true);
+    final auth = context.read<AuthProvider>();
+    auth.clearError();
+    final ok = await auth.requestPasswordReset(email);
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã gửi email đặt lại mật khẩu từ Firebase. Kiểm tra hộp thư (và Spam).'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error ?? 'Gửi email thất bại')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36, height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-            ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Quên mật khẩu',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Firebase Authentication sẽ gửi email chứa liên kết đặt lại mật khẩu đến địa chỉ của bạn.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loading ? null : _send,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Gửi email đặt lại mật khẩu'),
+              ),
+            ],
           ),
-          const Text(
-            'Reset Password',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Enter your email address and we\'ll send you a verification OTP.',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
-          ),
-          const SizedBox(height: 18),
-          const TextField(
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'Email Address',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 44),
-            ),
-            child: const Text('Send OTP'),
-          ),
-        ],
+        ),
       ),
     );
   }

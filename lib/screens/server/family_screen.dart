@@ -1,8 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
+import '../../models/family_member_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/family_repository.dart';
 import '../../theme/app_theme.dart';
-import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
-import '../../localization/app_localization.dart';
 import '../widgets/add_family_dialog.dart';
 
 class FamilyScreen extends StatefulWidget {
@@ -13,27 +18,8 @@ class FamilyScreen extends StatefulWidget {
 }
 
 class _FamilyScreenState extends State<FamilyScreen> {
+  final _familyRepo = FamilyRepository();
   final _searchController = TextEditingController();
-  List<FamilyMember> _filtered = mockFamilyMembers;
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearch);
-  }
-
-  void _onSearch() {
-    final q = _searchController.text.toLowerCase();
-    setState(() {
-      _filtered = q.isEmpty
-          ? mockFamilyMembers
-          : mockFamilyMembers
-              .where((m) =>
-                  m.name.toLowerCase().contains(q) ||
-                  m.email.toLowerCase().contains(q))
-              .toList();
-    });
-  }
 
   @override
   void dispose() {
@@ -41,17 +27,91 @@ class _FamilyScreenState extends State<FamilyScreen> {
     super.dispose();
   }
 
+  Future<void> _refreshProfile() async {
+    await context.read<AuthProvider>().refreshUserProfile();
+  }
+
+  Future<void> _createFamily() async {
+    final ctrl = TextEditingController(text: 'My family');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tạo nhóm gia đình'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Tên nhóm'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Tạo')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final id = await _familyRepo.createFamily(ctrl.text.trim());
+    if (!mounted) return;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không tạo được (có thể bạn đã là admin của một nhóm khác).')),
+      );
+      return;
+    }
+    await _refreshProfile();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Đã tạo nhóm gia đình'), backgroundColor: Colors.green),
+    );
+  }
+
+  Future<void> _inviteByEmail(String familyId, String name, String email, String relation) async {
+    try {
+      final result = await _familyRepo.inviteMemberByEmail(familyId, email);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Lời mời đã tạo'),
+          content: SelectableText(
+            'Email: $email\n'
+            'Quan hệ: $relation ($name)\n\n'
+            'Liên kết mời (gửi cho thành viên, kèm trong email / tin nhắn):\n${result['inviteLink']}\n\n'
+            'Sau khi thành viên đăng nhập đúng Gmail và gửi token trong app, họ vẫn nằm trong hàng đợi — bạn duyệt Accept/Reject giống yêu cầu tham gia bằng mã nhóm.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: result['inviteLink'] ?? ''));
+              },
+              child: const Text('Sao chép link'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final familyId = user?.familyId;
+    final joinCode = user?.familyCode;
+
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: SubtitleAppBar(
         title: 'Family Management',
-        subtitle: 'Manage trusted members & alert recipients',
+        subtitle: 'Một admin / nhóm — duyệt thành viên & mời qua Gmail + OTP',
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            onPressed: _refreshProfile,
           ),
         ],
       ),
@@ -60,400 +120,199 @@ class _FamilyScreenState extends State<FamilyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showAddMemberDialog(),
-                    icon: const Icon(Icons.person_add_outlined, size: 18),
-                    label: const Text('Add Member'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 46),
+            if (familyId == null) ...[
+              GreenBannerCard(
+                title: 'Chưa có nhóm gia đình',
+                subtitle: 'Admin tạo một nhóm duy nhất. Bạn sẽ nắm familyId và mã tham gia 6 số.',
+                trailing: const Icon(Icons.info_outline_rounded, color: AppTheme.primary),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _createFamily,
+                icon: const Icon(Icons.add_home_rounded, size: 18),
+                label: const Text('Tạo nhóm gia đình'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 46),
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AddFamilyDialog(
+                            onAdd: (name, email, relation) {
+                              _inviteByEmail(familyId, name, email, relation);
+                            },
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.person_add_outlined, size: 18),
+                      label: const Text('Mời qua Gmail + OTP'),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 46),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showJoinFamilyDialog(),
-                    icon: const Icon(Icons.group_add_outlined, size: 18),
-                    label: const Text('Join Family'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (joinCode != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Mã tham gia (6 số)'),
+                  subtitle: Text(joinCode, style: const TextStyle(fontFamily: 'monospace', fontSize: 16)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.copy),
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: joinCode));
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Đã sao chép mã')),
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Family ID'),
+                subtitle: SelectableText(familyId, style: const TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(height: 8),
+              const SectionHeader(title: 'Yêu cầu tham gia (chờ duyệt)'),
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _familyRepo.joinRequests(familyId),
+                builder: (context, snap) {
+                  if (!snap.hasData || snap.data!.docs.isEmpty) {
+                    return const Text('Không có yêu cầu chờ duyệt', style: TextStyle(color: AppTheme.textSecondary));
+                  }
+                  return Column(
+                    children: snap.data!.docs.map((d) {
+                      final m = d.data();
+                      final src = m['source'] as String? ?? 'join_code';
+                      final srcLabel = src == 'email_invite' ? 'Lời mời email' : 'Mã nhóm';
+                      return Card(
+                        child: ListTile(
+                          title: Text(m['requesterEmail']?.toString() ?? ''),
+                          subtitle: Text(
+                            '${m['requesterName'] ?? ''}\n$srcLabel',
+                            style: const TextStyle(height: 1.35),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.check, color: Colors.green),
+                                onPressed: () async {
+                                  try {
+                                    await _familyRepo.acceptJoinRequest(d.id);
+                                    await _refreshProfile();
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Đã chấp nhận')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                    }
+                                  }
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.red),
+                                onPressed: () async {
+                                  try {
+                                    await _familyRepo.rejectJoinRequest(d.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Đã từ chối')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                    }
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              const SectionHeader(title: 'Thành viên'),
+              StreamBuilder<List<FamilyMemberModel>>(
+                stream: _familyRepo.getMembers(familyId),
+                builder: (context, snapshot) {
+                  final all = snapshot.data ?? [];
+                  final q = _searchController.text.toLowerCase();
+                  final filtered = q.isEmpty
+                      ? all
+                      : all.where((m) {
+                          final hay = '${m.email} ${m.displayName} ${m.userId}'.toLowerCase();
+                          return hay.contains(q);
+                        }).toList();
 
-            // Invite button (legacy)
-            ElevatedButton.icon(
-              onPressed: _showInviteDialog,
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-              label: const Text('Invite Member'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                  return Column(
+                    children: [
+                      TextField(
+                        controller: _searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          hintText: 'Tìm thành viên...',
+                          prefixIcon: Icon(Icons.search_rounded, size: 20),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (filtered.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Không có thành viên'),
+                        )
+                      else
+                        Card(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                            itemBuilder: (context, i) {
+                              final m = filtered[i];
+                              final label = m.displayName?.isNotEmpty == true
+                                  ? m.displayName!
+                                  : (m.email ?? m.userId);
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(
+                                    label.isNotEmpty ? label[0].toUpperCase() : '?',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ),
+                                title: Text(label),
+                                subtitle: Text('${m.role} · ${m.status}'),
+                                trailing: m.role == 'admin'
+                                    ? const Chip(label: Text('Admin'), visualDensity: VisualDensity.compact)
+                                    : null,
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 14),
-
-            // Search
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search members...',
-                prefixIcon: Icon(Icons.search_rounded, size: 20),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Coverage banner
-            GreenBannerCard(
-              title: 'Sentinel Coverage',
-              subtitle: 'Active monitoring across all registered family members.',
-              trailing: const Text(
-                '100%',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.primary,
-                ),
-              ),
-              bottom: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: 1.0,
-                  minHeight: 6,
-                  backgroundColor: AppTheme.primaryContainer,
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                ),
-              ),
-            ),
-
-            // Members list
-            SectionHeader(
-              title: 'Members (${_filtered.length})',
-              trailing: TextButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.settings_outlined, size: 14),
-                label: const Text('Manage'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primary,
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-              ),
-            ),
-            Card(
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _filtered.length,
-                separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
-                itemBuilder: (context, i) => _MemberTile(member: _filtered[i]),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Alert settings
-            const SectionHeader(title: 'Alert Delivery Settings'),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  children: [
-                    _AlertSettingRow(
-                      icon: Icons.notifications_active_rounded,
-                      label: 'Push Notifications',
-                      subtitle: 'All family members',
-                      enabled: true,
-                    ),
-                    const Divider(height: 1),
-                    _AlertSettingRow(
-                      icon: Icons.sms_rounded,
-                      label: 'SMS Alerts',
-                      subtitle: 'Admin only',
-                      enabled: true,
-                    ),
-                    const Divider(height: 1),
-                    _AlertSettingRow(
-                      icon: Icons.email_rounded,
-                      label: 'Email Digest',
-                      subtitle: 'Daily summary',
-                      enabled: false,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            ],
             const SizedBox(height: 80),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showInviteDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: const _InviteSheet(),
-      ),
-    );
-  }
-
-  void _showAddMemberDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AddFamilyDialog(
-        onAdd: (name, relation) {
-          final loc = AppLocalizations.of(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${loc.translate('family_added')}: $name'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // TODO: Add to family list
-        },
-      ),
-    );
-  }
-
-  void _showJoinFamilyDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => JoinFamilyDialog(
-        onJoin: (code) {
-          final loc = AppLocalizations.of(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.translate('family_joined')),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // TODO: Validate and join family
-        },
-      ),
-    );
-  }
-}
-
-class _MemberTile extends StatelessWidget {
-  final FamilyMember member;
-
-  const _MemberTile({required this.member});
-
-  @override
-  Widget build(BuildContext context) {
-    final isActive = member.status == MemberStatus.active;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      leading: CircleAvatar(
-        radius: 20,
-        backgroundColor: member.avatarColor,
-        child: Text(
-          member.initials,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.primaryDark,
-          ),
-        ),
-      ),
-      title: Text(
-        member.name,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        '${member.relationship} · ${member.role == MemberRole.admin ? 'Admin' : 'Viewer'}',
-        style: const TextStyle(fontSize: 11),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isActive)
-            StatusBadge.green('Active')
-          else
-            StatusBadge.orange('Pending'),
-          const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary, size: 18),
-        ],
-      ),
-    );
-  }
-}
-
-class _AlertSettingRow extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final bool enabled;
-
-  const _AlertSettingRow({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.enabled,
-  });
-
-  @override
-  State<_AlertSettingRow> createState() => _AlertSettingRowState();
-}
-
-class _AlertSettingRowState extends State<_AlertSettingRow> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.enabled;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(widget.icon, size: 18, color: AppTheme.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.label,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  widget.subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: _enabled,
-            onChanged: (v) => setState(() => _enabled = v),
-            activeColor: AppTheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InviteSheet extends StatelessWidget {
-  const _InviteSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const Text(
-            'Invite Family Member',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'They will receive an email to join your monitoring circle.',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 18),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Full Name',
-              prefixIcon: Icon(Icons.person_outline_rounded),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const TextField(
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'Email Address',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            decoration: const InputDecoration(
-              labelText: 'Relationship',
-              prefixIcon: Icon(Icons.people_outline_rounded),
-            ),
-            items: ['Son', 'Daughter', 'Spouse', 'Other']
-                .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                .toList(),
-            onChanged: (_) {},
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.send_rounded, size: 16),
-                  label: const Text('Send Invite'),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

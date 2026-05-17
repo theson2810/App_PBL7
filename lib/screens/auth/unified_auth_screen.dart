@@ -6,7 +6,7 @@ import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../theme/app_theme.dart';
 
-enum AuthMode { login, register, forgotPassword, verifyCode, verifyPasswordReset, resetPassword }
+enum AuthMode { login, register, forgotPassword, verifyCode, resetEmailSent }
 
 class UnifiedAuthScreen extends StatefulWidget {
   final Function(UserType) onLoginSuccess;
@@ -31,9 +31,6 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
   final _confirmPasswordController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _verificationCodeController = TextEditingController();
-  final _newPasswordController = TextEditingController();
-  final _confirmNewPasswordController = TextEditingController();
 
   // State
   bool _showPassword = false;
@@ -50,9 +47,6 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
     _confirmPasswordController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
-    _verificationCodeController.dispose();
-    _newPasswordController.dispose();
-    _confirmNewPasswordController.dispose();
     super.dispose();
   }
 
@@ -62,9 +56,6 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
       // Clear sensitive fields when switching modes
       _passwordController.clear();
       _confirmPasswordController.clear();
-      _verificationCodeController.clear();
-      _newPasswordController.clear();
-      _confirmNewPasswordController.clear();
     });
   }
 
@@ -134,13 +125,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
   }
 
   void _handleVerifyEmail(AuthProvider authProvider) async {
-    if (_verificationCodeController.text.isEmpty) {
-      return;
-    }
-
     final success = await authProvider.verifyEmail(
       _emailForVerification ?? _emailController.text.trim(),
-      _verificationCodeController.text,
+      '',
     );
 
     if (success && mounted) {
@@ -166,49 +153,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
 
     if (success && mounted) {
       _emailForVerification = _emailController.text.trim();
-      _switchMode(AuthMode.verifyPasswordReset);
-    }
-  }
-
-  void _handleVerifyPasswordReset(AuthProvider authProvider) async {
-    if (_verificationCodeController.text.isEmpty) {
-      return;
-    }
-
-    final success = await authProvider.verifyPasswordResetCode(
-      _emailForVerification ?? _emailController.text.trim(),
-      _verificationCodeController.text,
-    );
-
-    if (success && mounted) {
-      _switchMode(AuthMode.resetPassword);
-    }
-  }
-
-  void _handleResetPassword(AuthProvider authProvider) async {
-    final loc = AppLocalizations.of(context);
-
-    if (_newPasswordController.text.isEmpty || _confirmNewPasswordController.text.isEmpty) {
-      return;
-    }
-
-    if (_newPasswordController.text != _confirmNewPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(loc.strings['confirm_password'] ?? 'Passwords do not match')),
-      );
-      return;
-    }
-
-    final success = await authProvider.resetPassword(
-      _emailForVerification ?? _emailController.text.trim(),
-      _verificationCodeController.text,
-      _newPasswordController.text,
-    );
-
-    if (success && mounted) {
-      _switchMode(AuthMode.login);
-      _emailController.clear();
-      _passwordController.clear();
+      _switchMode(AuthMode.resetEmailSent);
     }
   }
 
@@ -235,8 +180,8 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
                     _buildForgotPasswordHeader(loc),
                   ] else if (_currentMode == AuthMode.verifyCode) ...[
                     _buildVerifyEmailHeader(loc),
-                  ] else if (_currentMode == AuthMode.verifyPasswordReset || _currentMode == AuthMode.resetPassword) ...[
-                    _buildResetPasswordHeader(loc),
+                  ] else if (_currentMode == AuthMode.resetEmailSent) ...[
+                    _buildResetEmailSentHeader(loc),
                   ],
 
                   const SizedBox(height: 32),
@@ -250,10 +195,8 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
                     _buildForgotPasswordContent(authProvider, loc),
                   ] else if (_currentMode == AuthMode.verifyCode) ...[
                     _buildVerifyEmailContent(authProvider, loc),
-                  ] else if (_currentMode == AuthMode.verifyPasswordReset) ...[
-                    _buildVerifyPasswordResetContent(authProvider, loc),
-                  ] else if (_currentMode == AuthMode.resetPassword) ...[
-                    _buildResetPasswordContent(authProvider, loc),
+                  ] else if (_currentMode == AuthMode.resetEmailSent) ...[
+                    _buildResetEmailSentContent(loc),
                   ],
 
                   // Error message
@@ -638,25 +581,15 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
 
   Widget _buildVerifyEmailContent(AuthProvider authProvider, AppLocalizations loc) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          loc.strings['code_sent'] ?? 'Code sent to your email',
+          'Mở Gmail và bấm liên kết xác thực trong email Firebase. Sau đó nhấn nút bên dưới.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppTheme.textSecondary,
-          ),
+                color: AppTheme.textSecondary,
+              ),
         ),
         const SizedBox(height: 24),
-
-        _buildTextField(
-          controller: _verificationCodeController,
-          label: loc.strings['verification_code'] ?? 'Verification Code',
-          hint: loc.strings['enter_code'] ?? 'Enter 6-digit code',
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          autofocus: true,
-        ),
-        const SizedBox(height: 24),
-
         ElevatedButton(
           onPressed: authProvider.isLoading ? null : () => _handleVerifyEmail(authProvider),
           style: ElevatedButton.styleFrom(
@@ -676,7 +609,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
                   ),
                 )
               : Text(
-                  loc.strings['verify'] ?? 'Verify',
+                  loc.strings['verify'] ?? 'I opened the email link',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -685,11 +618,10 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
                 ),
         ),
         const SizedBox(height: 16),
-
         TextButton(
           onPressed: () => _handleResendCode(authProvider),
           child: Text(
-            loc.strings['resend_code'] ?? 'Resend Code',
+            loc.strings['resend_code'] ?? 'Resend verification email',
             style: TextStyle(
               color: AppTheme.primary,
               decoration: TextDecoration.underline,
@@ -700,133 +632,34 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
     );
   }
 
-  // ─── Verify Password Reset Content ──────────────
-  Widget _buildResetPasswordHeader(AppLocalizations loc) {
-    if (_currentMode == AuthMode.verifyPasswordReset) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            loc.strings['verify_password_reset'] ?? 'Verify Password Reset',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primary,
-            ),
-          ),
-        ],
-      );
-    } else {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => _switchMode(AuthMode.forgotPassword),
-                icon: const Icon(Icons.arrow_back),
-              ),
-              Expanded(
-                child: Text(
-                  loc.strings['reset_password'] ?? 'Reset Password',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
-    }
-  }
-
-  Widget _buildVerifyPasswordResetContent(AuthProvider authProvider, AppLocalizations loc) {
+  Widget _buildResetEmailSentHeader(AppLocalizations loc) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          loc.strings['code_sent'] ?? 'Code sent to your email',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        _buildTextField(
-          controller: _verificationCodeController,
-          label: loc.strings['verification_code'] ?? 'Verification Code',
-          hint: loc.strings['enter_code'] ?? 'Enter 6-digit code',
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          autofocus: true,
-        ),
-        const SizedBox(height: 24),
-
-        ElevatedButton(
-          onPressed: authProvider.isLoading ? null : () => _handleVerifyPasswordReset(authProvider),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            backgroundColor: AppTheme.primary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: authProvider.isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
-              : Text(
-                  loc.strings['verify'] ?? 'Verify',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-        ),
-        const SizedBox(height: 16),
-
-        TextButton(
-          onPressed: () => _handleResendCode(authProvider),
-          child: Text(
-            loc.strings['resend_code'] ?? 'Resend Code',
-            style: TextStyle(
-              color: AppTheme.primary,
-              decoration: TextDecoration.underline,
-            ),
+          loc.strings['forgot_password'] ?? 'Forgot Password?',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.primary,
           ),
         ),
       ],
     );
   }
 
-  // ─── Reset Password Content ────────────────────
-  Widget _buildResetPasswordContent(AuthProvider authProvider, AppLocalizations loc) {
+  Widget _buildResetEmailSentContent(AppLocalizations loc) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildPasswordField(
-          controller: _newPasswordController,
-          label: loc.strings['new_password'] ?? 'New Password',
-          showPassword: _showPassword,
-          onToggle: () => setState(() => _showPassword = !_showPassword),
-        ),
-        const SizedBox(height: 16),
-
-        _buildPasswordField(
-          controller: _confirmNewPasswordController,
-          label: loc.strings['confirm_new_password'] ?? 'Confirm New Password',
-          showPassword: _showConfirmPassword,
-          onToggle: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
+        Text(
+          'Firebase đã gửi email đặt lại mật khẩu. Mở email và làm theo liên kết để đặt mật khẩu mới.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppTheme.textSecondary,
+              ),
         ),
         const SizedBox(height: 24),
-
         ElevatedButton(
-          onPressed: authProvider.isLoading ? null : () => _handleResetPassword(authProvider),
+          onPressed: () => _switchMode(AuthMode.login),
           style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
             backgroundColor: AppTheme.primary,
@@ -834,23 +667,14 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: authProvider.isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
-              : Text(
-                  loc.strings['reset_password'] ?? 'Reset Password',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+          child: Text(
+            loc.strings['sign_in'] ?? 'Back to Sign In',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
         ),
       ],
     );

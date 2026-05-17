@@ -32,9 +32,10 @@ class UserAccount {
   final bool emailVerified;
   final String? verificationCode; // For email verification
   final DateTime? verificationCodeExpiry;
-  final String? resetCode; // For password reset
+  final String? resetCode; // Legacy / optional (password reset uses Firebase email)
   final DateTime? resetCodeExpiry;
-  final String? familyCode; // Family code for admin/family linking
+  final String? familyCode; // Human-readable join code (e.g. 6 digits)
+  final String? familyId; // Firestore families/{id}
 
   const UserAccount({
     required this.id,
@@ -56,6 +57,7 @@ class UserAccount {
     this.resetCode,
     this.resetCodeExpiry,
     this.familyCode,
+    this.familyId,
   });
 
   // Create a copy with some fields changed
@@ -79,6 +81,7 @@ class UserAccount {
     String? resetCode,
     DateTime? resetCodeExpiry,
     String? familyCode,
+    String? familyId,
   }) {
     return UserAccount(
       id: id ?? this.id,
@@ -100,6 +103,7 @@ class UserAccount {
       resetCode: resetCode ?? this.resetCode,
       resetCodeExpiry: resetCodeExpiry ?? this.resetCodeExpiry,
       familyCode: familyCode ?? this.familyCode,
+      familyId: familyId ?? this.familyId,
     );
   }
 
@@ -192,7 +196,8 @@ final List<UserAccount> mockUsers = [
     createdAt: DateTime.now().subtract(const Duration(days: 90)),
     lastLogin: DateTime.now().subtract(const Duration(hours: 2)),
     assignedCaregivers: ['admin_1'],
-    familyCode: 'FAM-AB12CD34', // Joined this admin's family
+    familyCode: '123456',
+    familyId: 'fam_demo',
     emailVerified: true, // Already verified for testing
   ),
   UserAccount(
@@ -204,7 +209,8 @@ final List<UserAccount> mockUsers = [
     status: AccountStatus.active,
     createdAt: DateTime.now().subtract(const Duration(days: 365)),
     lastLogin: DateTime.now(),
-    familyCode: 'FAM-AB12CD34', // Auto-generated for admin
+    familyCode: '123456',
+    familyId: 'fam_demo',
     emailVerified: true, // Already verified for testing
   ),
 ];
