@@ -8,18 +8,23 @@ class NotificationService {
   Future<void> initFCM() async {
     await _messaging.requestPermission();
 
-    String? token = await _messaging.getToken();
-
+    final token = await _messaging.getToken();
     if (token != null) {
       await saveDeviceToken(token);
     }
 
+    _messaging.onTokenRefresh.listen(saveDeviceToken);
+
     FirebaseMessaging.onMessage.listen((message) {
-      print("NOTI: ${message.notification?.title}");
+      final title = message.notification?.title ?? 'Elderly Care Monitor';
+      final body = message.notification?.body ?? '';
+      // ignore: avoid_print
+      print('FCM foreground: $title — $body');
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      print("OPENED APP FROM NOTI");
+      // ignore: avoid_print
+      print('FCM opened: ${message.data}');
     });
   }
 

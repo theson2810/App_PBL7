@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
 import '../../localization/app_localization.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/alert_repository.dart';
+import '../../repositories/camera_repository.dart';
+import '../../utils/alert_ui_mapper.dart';
+import '../../utils/camera_ui_mapper.dart';
 import 'live_view_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  final VoidCallback onSwitchApp;
-
-  const HomeScreen({super.key, required this.onSwitchApp});
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final familyId = user?.familyId;
+    final alertRepo = AlertRepository();
+    final cameraRepo = CameraRepository();
+
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
@@ -28,126 +37,138 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             Text(
-              AppLocalizations.of(context).translate('app_name_server'),
+              AppLocalizations.of(context).appNameClient,
               style: const TextStyle(color: Colors.white60, fontSize: 11),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded, color: Colors.white),
-            onPressed: () {},
-          ),
-          GestureDetector(
-            onTap: onSwitchApp,
-            child: Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white30),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    AppLocalizations.of(context).switchServer,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+          if (user != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Text(
+                  user.fullName,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ),
             ),
-          ),
         ],
       ),
-      body: RefreshIndicator(
-        color: AppTheme.primary,
-        onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Quick action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.videocam_rounded, size: 18),
-                      label: const Text('Add Camera'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
+      body: familyId == null || familyId.isEmpty
+          ? _NoFamilyBody(
+              userName: user?.fullName,
+              message: AppLocalizations.of(context).translate('join_family_hint'),
+            )
+          : RefreshIndicator(
+              color: AppTheme.primary,
+              onRefresh: () async {
+                await context.read<AuthProvider>().authService.refreshCurrentUserProfile();
+              },
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    OutlinedButton.icon(
                       onPressed: () => _showQrScanner(context),
                       icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                      label: const Text('Scan QR Code'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Active nodes header
-              SectionHeader(
-                title: 'Active Stream Nodes',
-                trailing: StatusBadge.green(
-                  '${mockClientCameras.where((c) => c.status == CameraStatus.live).length} Online',
-                ),
-              ),
-
-              // Camera grid
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 1.1,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: mockClientCameras.length + 1,
-                itemBuilder: (context, i) {
-                  if (i == mockClientCameras.length) {
-                    return _AddCameraPlaceholder();
-                  }
-                  final cam = mockClientCameras[i];
-                  return GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LiveViewScreen(camera: cam),
+                      label: Text(AppLocalizations.of(context).translate('scan_chip_qr')),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 44),
                       ),
                     ),
-                    child: CameraThumbCard(camera: cam, darkMode: true),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Recent alerts preview
-              SectionHeader(
-                title: 'Recent Alerts',
-                trailing: TextButton(
-                  onPressed: () {},
-                  child: const Text('View All'),
+                    const SizedBox(height: 16),
+                    StreamBuilder(
+                      stream: cameraRepo.getCameras(familyId),
+                      builder: (context, camSnap) {
+                        final cameras = toUiCameras(camSnap.data ?? []);
+                        final online = cameras
+                            .where((c) => c.status == CameraStatus.live)
+                            .length;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionHeader(
+                              title: AppLocalizations.of(context).translate('registered_cameras'),
+                              trailing: StatusBadge.green(
+                                '$online ${AppLocalizations.of(context).translate('online_count')}',
+                              ),
+                            ),
+                            if (camSnap.connectionState == ConnectionState.waiting)
+                              const Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            else if (cameras.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Text(
+                                  AppLocalizations.of(context).translate('no_cameras_admin_hint'),
+                                  style: const TextStyle(color: AppTheme.textSecondary),
+                                ),
+                              )
+                            else
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  childAspectRatio: 1.1,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                ),
+                                itemCount: cameras.length,
+                                itemBuilder: (context, i) {
+                                  final cam = cameras[i];
+                                  return GestureDetector(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => LiveViewScreen(camera: cam),
+                                      ),
+                                    ),
+                                    child: CameraThumbCard(camera: cam, darkMode: true),
+                                  );
+                                },
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    StreamBuilder(
+                      stream: alertRepo.listenAlerts(familyId),
+                      builder: (context, alertSnap) {
+                        final uiAlerts = toUiAlerts(alertSnap.data ?? []);
+                        final recent = uiAlerts.take(3).toList();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionHeader(
+                              title: AppLocalizations.of(context).translate('recent_alerts'),
+                            ),
+                            if (recent.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text(
+                                  AppLocalizations.of(context).translate('no_alerts_yet'),
+                                  style: const TextStyle(color: AppTheme.textSecondary),
+                                ),
+                              )
+                            else
+                              ...recent.map((a) => _AlertPreviewTile(alert: a)),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 80),
+                  ],
                 ),
               ),
-              ...mockAlerts.take(2).map((a) => _AlertPreviewTile(alert: a)),
-              const SizedBox(height: 80),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -213,6 +234,39 @@ class HomeScreen extends StatelessWidget {
                 minimumSize: const Size(double.infinity, 44),
               ),
               child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoFamilyBody extends StatelessWidget {
+  final String? userName;
+  final String message;
+
+  const _NoFamilyBody({this.userName, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.group_off_outlined, size: 56, color: AppTheme.textTertiary),
+            const SizedBox(height: 16),
+            Text(
+              'Hello${userName != null ? ', $userName' : ''}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),

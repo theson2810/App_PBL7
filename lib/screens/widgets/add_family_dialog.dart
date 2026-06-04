@@ -110,15 +110,15 @@ class _AddFamilyDialogState extends State<AddFamilyDialog> {
             DropdownButtonFormField<String>(
               value: _relationController.text.isEmpty ? null : _relationController.text,
               items: [
-                'Spouse',
-                'Child',
-                'Parent',
-                'Sibling',
-                'Grandchild',
-                'Caregiver',
-              ].map((rel) => DropdownMenuItem(
-                value: rel,
-                child: Text(rel),
+                ('relation_spouse', loc.translate('relation_spouse')),
+                ('relation_child', loc.translate('relation_child')),
+                ('relation_parent', loc.translate('relation_parent')),
+                ('relation_sibling', loc.translate('relation_sibling')),
+                ('relation_grandchild', loc.translate('relation_grandchild')),
+                ('relation_caregiver', loc.translate('relation_caregiver')),
+              ].map((e) => DropdownMenuItem(
+                value: e.$1,
+                child: Text(e.$2),
               )).toList(),
               onChanged: (value) {
                 if (value != null) {
@@ -231,8 +231,8 @@ class _JoinFamilyDialogState extends State<JoinFamilyDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Nhập mã 6 số của nhóm hoặc Family ID (Firestore) để gửi yêu cầu tham gia. Admin sẽ duyệt.',
-              style: TextStyle(
+              loc.translate('join_family_dialog_help'),
+              style: const TextStyle(
                 fontSize: 13,
                 color: AppTheme.textSecondary,
               ),
@@ -244,7 +244,7 @@ class _JoinFamilyDialogState extends State<JoinFamilyDialog> {
               controller: _codeController,
               decoration: InputDecoration(
                 labelText: loc.translate('family_code'),
-                hintText: 'VD: 123456 hoặc Family ID',
+                hintText: loc.translate('join_family_code_hint'),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

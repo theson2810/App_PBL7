@@ -50,22 +50,27 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         if (ok && authProvider.isAuthenticated) {
           // AuthGate chuyển sang app chính
         } else if (ok && authProvider.pendingVerificationEmail != null) {
+          final loc = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đăng nhập thành công. Vui lòng xác thực email để tiếp tục.'),
+            SnackBar(
+              content: Text(loc.translate('login_verify_email')),
               backgroundColor: Colors.orange,
             ),
           );
         } else {
+          final loc = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(authProvider.error ?? 'Đăng nhập thất bại')),
+            SnackBar(
+              content: Text(authProvider.error ?? loc.translate('login_failed')),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
+        final loc = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          SnackBar(content: Text('${loc.translate('error_prefix')}: $e')),
         );
       }
     } finally {
@@ -96,9 +101,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
       if (mounted) {
         if (ok) {
+          final loc = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đăng ký thành công! Vui lòng xác nhận email'),
+            SnackBar(
+              content: Text(loc.translate('register_success_email')),
               backgroundColor: Colors.green,
             ),
           );
@@ -113,15 +119,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             });
           }
         } else {
+          final loc = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(authProvider.error ?? 'Đăng ký thất bại')),
+            SnackBar(
+              content: Text(
+                authProvider.error ?? loc.translate('register_failed'),
+              ),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
+        final loc = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          SnackBar(content: Text('${loc.translate('error_prefix')}: $e')),
         );
       }
     } finally {
@@ -133,6 +145,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -170,9 +183,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Vital Horizon',
-                      style: TextStyle(
+                    Text(
+                      loc.translate('app_title'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
@@ -194,17 +207,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       children: [
                         _FeaturePill(
                           icon: Icons.videocam_rounded,
-                          label: 'Live View',
+                          label: loc.translate('feature_live_view'),
                         ),
                         const SizedBox(width: 8),
                         _FeaturePill(
                           icon: Icons.notifications_active_rounded,
-                          label: 'Instant Alerts',
+                          label: loc.translate('feature_instant_alerts'),
                         ),
                         const SizedBox(width: 8),
                         _FeaturePill(
                           icon: Icons.smart_toy_rounded,
-                          label: 'AI Detect',
+                          label: loc.translate('feature_ai_detect'),
                         ),
                       ],
                     ),
@@ -230,7 +243,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                           child: Center(
                             child: Text(
-                              'Sign In',
+                              loc.signInTab,
                               style: TextStyle(
                                 color: _showLogin
                                     ? Colors.white
@@ -256,7 +269,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                           child: Center(
                             child: Text(
-                              'Register',
+                              loc.translate('register_tab'),
                               style: TextStyle(
                                 color: !_showLogin
                                     ? Colors.white
@@ -383,41 +396,42 @@ class _LoginForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Form(
       key: formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Welcome Back',
-            style: TextStyle(
+          Text(
+            loc.translate('welcome_back'),
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
               color: AppTheme.textPrimary,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Sign in to monitor your loved one',
-            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+          Text(
+            loc.translate('sign_in_subtitle'),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
           const SizedBox(height: 20),
           TextFormField(
             controller: emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email Address',
-              prefixIcon: Icon(Icons.email_outlined),
+            decoration: InputDecoration(
+              labelText: loc.translate('email_address'),
+              prefixIcon: const Icon(Icons.email_outlined),
             ),
             validator: (v) =>
-                v == null || v.isEmpty ? 'Please enter your email' : null,
+                v == null || v.isEmpty ? loc.translate('email_required') : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: passCtrl,
             obscureText: !showPassword,
             decoration: InputDecoration(
-              labelText: 'Password',
+              labelText: loc.translate('password_label'),
               prefixIcon: const Icon(Icons.lock_outline_rounded),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -430,7 +444,7 @@ class _LoginForm extends StatelessWidget {
               ),
             ),
             validator: (v) =>
-                v == null || v.length < 4 ? 'Enter a valid password' : null,
+                v == null || v.length < 4 ? loc.translate('password_valid') : null,
           ),
           const SizedBox(height: 8),
           Align(
@@ -442,9 +456,9 @@ class _LoginForm extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
               ),
-              child: const Text(
-                'Forgot Password?',
-                style: TextStyle(fontSize: 12),
+              child: Text(
+                loc.translate('forgot_password'),
+                style: const TextStyle(fontSize: 12),
               ),
             ),
           ),
@@ -467,7 +481,7 @@ class _LoginForm extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text('Sign In →'),
+                : Text(loc.translate('sign_in_arrow')),
           ),
         ],
       ),
@@ -500,30 +514,31 @@ class _RegisterForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Form(
       key: formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Create Account',
-            style: TextStyle(
+          Text(
+            loc.translate('create_account'),
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
               color: AppTheme.textPrimary,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Join the Vital Horizon network',
-            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+          Text(
+            loc.translate('join_vital_horizon'),
+            style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary),
           ),
           const SizedBox(height: 20),
           
           // Role selector
-          const Text(
-            'Account Type',
-            style: TextStyle(
+          Text(
+            loc.translate('account_type'),
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: AppTheme.textPrimary,
@@ -531,16 +546,16 @@ class _RegisterForm extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SegmentedButton<UserType>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: UserType.familyMember,
-                label: Text('Family Member'),
-                icon: Icon(Icons.people_outline),
+                label: Text(loc.translate('role_family')),
+                icon: const Icon(Icons.people_outline),
               ),
               ButtonSegment(
                 value: UserType.admin,
-                label: Text('Administrator'),
-                icon: Icon(Icons.admin_panel_settings_outlined),
+                label: Text(loc.translate('role_admin')),
+                icon: const Icon(Icons.admin_panel_settings_outlined),
               ),
             ],
             selected: {selectedRole},
@@ -554,42 +569,44 @@ class _RegisterForm extends StatelessWidget {
 
           TextFormField(
             controller: nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Full Name',
-              prefixIcon: Icon(Icons.person_outline_rounded),
+            decoration: InputDecoration(
+              labelText: loc.translate('full_name'),
+              prefixIcon: const Icon(Icons.person_outline_rounded),
             ),
-            validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
+            validator: (v) =>
+                v == null || v.isEmpty ? loc.translate('name_required') : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email Address',
-              prefixIcon: Icon(Icons.email_outlined),
+            decoration: InputDecoration(
+              labelText: loc.translate('email_address'),
+              prefixIcon: const Icon(Icons.email_outlined),
             ),
-            validator: (v) => v == null || v.isEmpty ? 'Email is required' : null,
+            validator: (v) =>
+                v == null || v.isEmpty ? loc.translate('email_required_short') : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: phoneCtrl,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number (Optional)',
-              prefixIcon: Icon(Icons.phone_outlined),
+            decoration: InputDecoration(
+              labelText: loc.translate('phone_number'),
+              prefixIcon: const Icon(Icons.phone_outlined),
             ),
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: passCtrl,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              prefixIcon: Icon(Icons.lock_outline_rounded),
-              helperText: 'Min. 6 characters',
+            decoration: InputDecoration(
+              labelText: loc.translate('password_label'),
+              prefixIcon: const Icon(Icons.lock_outline_rounded),
+              helperText: loc.translate('password_hint'),
             ),
             validator: (v) =>
-                v == null || v.length < 6 ? 'Password must be at least 6 characters' : null,
+                v == null || v.length < 6 ? loc.translate('password_min_6') : null,
           ),
           const SizedBox(height: 20),
           ElevatedButton(
@@ -607,7 +624,7 @@ class _RegisterForm extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text('Create Account →'),
+                : Text(loc.translate('create_account_arrow')),
           ),
         ],
       ),
@@ -641,10 +658,11 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   }
 
   Future<void> _send() async {
+    final loc = AppLocalizations.of(context);
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nhập email')),
+        SnackBar(content: Text(loc.translate('enter_email_snack'))),
       );
       return;
     }
@@ -656,21 +674,24 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     setState(() => _loading = false);
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đã gửi email đặt lại mật khẩu từ Firebase. Kiểm tra hộp thư (và Spam).'),
+        SnackBar(
+          content: Text(loc.translate('reset_email_sent')),
           backgroundColor: Colors.green,
         ),
       );
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? 'Gửi email thất bại')),
+        SnackBar(
+          content: Text(auth.error ?? loc.translate('reset_email_failed')),
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
@@ -691,22 +712,22 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                   ),
                 ),
               ),
-              const Text(
-                'Quên mật khẩu',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              Text(
+                loc.translate('reset_password_title'),
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Firebase Authentication sẽ gửi email chứa liên kết đặt lại mật khẩu đến địa chỉ của bạn.',
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+              Text(
+                loc.translate('forgot_password_body'),
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
               ),
               const SizedBox(height: 18),
               TextField(
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email_outlined),
+                decoration: InputDecoration(
+                  labelText: loc.translate('email_address'),
+                  prefixIcon: const Icon(Icons.email_outlined),
                 ),
               ),
               const SizedBox(height: 16),
@@ -721,7 +742,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Gửi email đặt lại mật khẩu'),
+                    : Text(loc.translate('send_reset_email')),
               ),
             ],
           ),

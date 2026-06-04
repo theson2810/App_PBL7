@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../localization/app_localization.dart';
 import '../../models/family_member_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../repositories/family_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../utils/family_join_error_mapper.dart';
+import '../../widgets/family_wifi_qr_sheet.dart';
 import '../widgets/add_family_dialog.dart';
 
 class FamilyScreen extends StatefulWidget {
@@ -32,18 +35,27 @@ class _FamilyScreenState extends State<FamilyScreen> {
   }
 
   Future<void> _createFamily() async {
-    final ctrl = TextEditingController(text: 'My family');
+    final loc = AppLocalizations.of(context);
+    final ctrl = TextEditingController(text: loc.translate('my_family_default'));
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Tạo nhóm gia đình'),
+        title: Text(loc.translate('create_family_dialog_title')),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Tên nhóm'),
+          decoration: InputDecoration(
+            labelText: loc.translate('family_group_name'),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Tạo')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(loc.translate('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(loc.translate('create_btn')),
+          ),
         ],
       ),
     );
@@ -53,52 +65,116 @@ class _FamilyScreenState extends State<FamilyScreen> {
     if (!mounted) return;
     if (id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không tạo được (có thể bạn đã là admin của một nhóm khác).')),
+        SnackBar(content: Text(loc.translate('family_create_failed'))),
       );
       return;
     }
     await _refreshProfile();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã tạo nhóm gia đình'), backgroundColor: Colors.green),
+      SnackBar(
+        content: Text(loc.translate('family_created')),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
-  Future<void> _inviteByEmail(String familyId, String name, String email, String relation) async {
+  Future<void> _confirmRemoveMember(
+    String familyId,
+    FamilyMemberModel member,
+  ) async {
+    final loc = AppLocalizations.of(context);
+    final label = member.displayName?.isNotEmpty == true
+        ? member.displayName!
+        : (member.email ?? member.userId);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(loc.translate('remove_member')),
+        content: Text(
+          '${loc.translate('remove_member_confirm')}\n\n$label',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(loc.translate('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: Text(loc.translate('remove_member')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await _familyRepo.removeFamilyMember(familyId, member.userId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(loc.translate('member_removed')),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mapFamilyJoinError(loc, e))),
+      );
+    }
+  }
+
+  Future<void> _inviteByEmail(
+    String familyId,
+    String name,
+    String email,
+    String relation,
+  ) async {
+    final loc = AppLocalizations.of(context);
     try {
       final result = await _familyRepo.inviteMemberByEmail(familyId, email);
       if (!mounted) return;
+      final link = result['inviteLink'] ?? '';
+      final relationLabel = relation.startsWith('relation_')
+          ? loc.translate(relation)
+          : relation;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Lời mời đã tạo'),
+          title: Text(loc.translate('invite_created_title')),
           content: SelectableText(
-            'Email: $email\n'
-            'Quan hệ: $relation ($name)\n\n'
-            'Liên kết mời (gửi cho thành viên, kèm trong email / tin nhắn):\n${result['inviteLink']}\n\n'
-            'Sau khi thành viên đăng nhập đúng Gmail và gửi token trong app, họ vẫn nằm trong hàng đợi — bạn duyệt Accept/Reject giống yêu cầu tham gia bằng mã nhóm.',
+            '${loc.translate('invite_email_line')}: $email\n'
+            '${loc.translate('invite_relation_line')}: $relationLabel ($name)\n\n'
+            '${loc.translate('invite_link_line')}:\n$link\n\n'
+            '${loc.translate('invite_approval_hint')}',
           ),
           actions: [
             TextButton(
               onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: result['inviteLink'] ?? ''));
+                await Clipboard.setData(ClipboardData(text: link));
               },
-              child: const Text('Sao chép link'),
+              child: Text(loc.translate('copy_link')),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Đóng'),
+              child: Text(loc.translate('close')),
             ),
           ],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${loc.translate('error_prefix')}: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     final user = context.watch<AuthProvider>().user;
     final familyId = user?.familyId;
     final joinCode = user?.familyCode;
@@ -106,8 +182,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: SubtitleAppBar(
-        title: 'Family Management',
-        subtitle: 'Một admin / nhóm — duyệt thành viên & mời qua Gmail + OTP',
+        title: loc.translate('server_family_title'),
+        subtitle: loc.translate('server_family_subtitle'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
@@ -122,15 +198,15 @@ class _FamilyScreenState extends State<FamilyScreen> {
           children: [
             if (familyId == null) ...[
               GreenBannerCard(
-                title: 'Chưa có nhóm gia đình',
-                subtitle: 'Admin tạo một nhóm duy nhất. Bạn sẽ nắm familyId và mã tham gia 6 số.',
+                title: loc.translate('no_family_banner_title'),
+                subtitle: loc.translate('no_family_banner_subtitle'),
                 trailing: const Icon(Icons.info_outline_rounded, color: AppTheme.primary),
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 onPressed: _createFamily,
                 icon: const Icon(Icons.add_home_rounded, size: 18),
-                label: const Text('Tạo nhóm gia đình'),
+                label: Text(loc.translate('create_family_btn')),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 46),
                 ),
@@ -151,7 +227,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                         );
                       },
                       icon: const Icon(Icons.person_add_outlined, size: 18),
-                      label: const Text('Mời qua Gmail + OTP'),
+                      label: Text(loc.translate('invite_gmail_otp')),
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 46),
                       ),
@@ -160,40 +236,63 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 ],
               ),
               const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => FamilyWifiQrSheet.show(
+                  context,
+                  familyId: familyId,
+                ),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 20),
+                label: Text(loc.translate('wifi_show_qr')),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 46),
+                ),
+              ),
+              const SizedBox(height: 10),
               if (joinCode != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Mã tham gia (6 số)'),
-                  subtitle: Text(joinCode, style: const TextStyle(fontFamily: 'monospace', fontSize: 16)),
+                  title: Text(loc.translate('join_code_6')),
+                  subtitle: Text(
+                    joinCode,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
+                  ),
                   trailing: IconButton(
                     icon: const Icon(Icons.copy),
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: joinCode));
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép mã')),
+                        SnackBar(content: Text(loc.translate('join_code_copied'))),
                       );
                     },
                   ),
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Family ID'),
-                subtitle: SelectableText(familyId, style: const TextStyle(fontSize: 12)),
+                title: Text(loc.translate('family_id_label')),
+                subtitle: SelectableText(
+                  familyId,
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
               const SizedBox(height: 8),
-              const SectionHeader(title: 'Yêu cầu tham gia (chờ duyệt)'),
+              SectionHeader(title: loc.translate('pending_join_requests')),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _familyRepo.joinRequests(familyId),
                 builder: (context, snap) {
                   if (!snap.hasData || snap.data!.docs.isEmpty) {
-                    return const Text('Không có yêu cầu chờ duyệt', style: TextStyle(color: AppTheme.textSecondary));
+                    return Text(
+                      loc.translate('no_pending_requests'),
+                      style: const TextStyle(color: AppTheme.textSecondary),
+                    );
                   }
                   return Column(
                     children: snap.data!.docs.map((d) {
                       final m = d.data();
                       final src = m['source'] as String? ?? 'join_code';
-                      final srcLabel = src == 'email_invite' ? 'Lời mời email' : 'Mã nhóm';
+                      final srcLabel = src == 'email_invite'
+                          ? loc.translate('source_email_invite')
+                          : loc.translate('source_join_code');
                       return Card(
                         child: ListTile(
                           title: Text(m['requesterEmail']?.toString() ?? ''),
@@ -212,12 +311,18 @@ class _FamilyScreenState extends State<FamilyScreen> {
                                     await _refreshProfile();
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Đã chấp nhận')),
+                                        SnackBar(
+                                          content: Text(loc.translate('request_accepted')),
+                                        ),
                                       );
                                     }
                                   } catch (e) {
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('${loc.translate('error_prefix')}: $e'),
+                                        ),
+                                      );
                                     }
                                   }
                                 },
@@ -229,12 +334,18 @@ class _FamilyScreenState extends State<FamilyScreen> {
                                     await _familyRepo.rejectJoinRequest(d.id);
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Đã từ chối')),
+                                        SnackBar(
+                                          content: Text(loc.translate('request_rejected')),
+                                        ),
                                       );
                                     }
                                   } catch (e) {
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('${loc.translate('error_prefix')}: $e'),
+                                        ),
+                                      );
                                     }
                                   }
                                 },
@@ -248,7 +359,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              const SectionHeader(title: 'Thành viên'),
+              SectionHeader(title: loc.translate('members_section')),
               StreamBuilder<List<FamilyMemberModel>>(
                 stream: _familyRepo.getMembers(familyId),
                 builder: (context, snapshot) {
@@ -257,7 +368,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
                   final filtered = q.isEmpty
                       ? all
                       : all.where((m) {
-                          final hay = '${m.email} ${m.displayName} ${m.userId}'.toLowerCase();
+                          final hay =
+                              '${m.email} ${m.displayName} ${m.userId}'.toLowerCase();
                           return hay.contains(q);
                         }).toList();
 
@@ -266,16 +378,16 @@ class _FamilyScreenState extends State<FamilyScreen> {
                       TextField(
                         controller: _searchController,
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                          hintText: 'Tìm thành viên...',
-                          prefixIcon: Icon(Icons.search_rounded, size: 20),
+                        decoration: InputDecoration(
+                          hintText: loc.translate('search_members_hint'),
+                          prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         ),
                       ),
                       const SizedBox(height: 8),
                       if (filtered.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Text('Không có thành viên'),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(loc.translate('no_members_yet')),
                         )
                       else
                         Card(
@@ -283,7 +395,8 @@ class _FamilyScreenState extends State<FamilyScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filtered.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1, indent: 56),
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1, indent: 56),
                             itemBuilder: (context, i) {
                               final m = filtered[i];
                               final label = m.displayName?.isNotEmpty == true
@@ -299,8 +412,21 @@ class _FamilyScreenState extends State<FamilyScreen> {
                                 title: Text(label),
                                 subtitle: Text('${m.role} · ${m.status}'),
                                 trailing: m.role == 'admin'
-                                    ? const Chip(label: Text('Admin'), visualDensity: VisualDensity.compact)
-                                    : null,
+                                    ? Chip(
+                                        label: Text(loc.translate('admin_badge')),
+                                        visualDensity: VisualDensity.compact,
+                                      )
+                                    : IconButton(
+                                        icon: const Icon(
+                                          Icons.person_remove_outlined,
+                                          color: AppTheme.errorColor,
+                                        ),
+                                        tooltip: loc.translate('remove_member'),
+                                        onPressed: () => _confirmRemoveMember(
+                                          familyId,
+                                          m,
+                                        ),
+                                      ),
                               );
                             },
                           ),

@@ -50,6 +50,15 @@ class FamilyRepository {
   Stream<List<FamilyMemberModel>> getMembers(String familyId) =>
       _familyService.membersStream(familyId);
 
+  Future<Map<String, dynamic>> createWifiJoinSession(String familyId) =>
+      _familyService.createWifiJoinSession(familyId);
+
+  Future<String> joinFamilyViaWifiSession(String sessionId) =>
+      _familyService.joinFamilyViaWifiSession(sessionId);
+
+  Future<void> removeFamilyMember(String familyId, String memberUserId) =>
+      _familyService.removeFamilyMember(familyId, memberUserId);
+
   Future<String?> getInviteCode(String familyId) async {
     try {
       return await _familyService.getInviteCode(familyId);

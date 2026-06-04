@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/auth_models.dart';
+import 'device_session_service.dart';
 
 /// AuthService maps UI flows to Firebase Auth + Firestore `users/{uid}`.
 class AuthService {
@@ -86,6 +87,16 @@ class AuthService {
     final account = await _userFromDoc(latest);
     if (account == null) return null;
 
+    if (account.emailVerified) {
+      final sessionOk =
+          await DeviceSessionService.instance.verifyLocalSession(account.id);
+      if (!sessionOk) {
+        DeviceSessionService.instance.stopWatching();
+        await _auth.signOut();
+        return null;
+      }
+    }
+
     await refreshedFbUser.reload();
     final firebaseVerifiedNow = _auth.currentUser?.emailVerified ?? false;
     return account.copyWith(emailVerified: account.emailVerified || firebaseVerifiedNow);
@@ -130,6 +141,10 @@ class AuthService {
 
       final refreshed = await FirebaseFirestore.instance.collection('users').doc(fbUser.uid).get();
       final userAccount = await _userFromDoc(refreshed);
+
+      if (userAccount != null && userAccount.emailVerified) {
+        await DeviceSessionService.instance.registerActiveSession(fbUser.uid);
+      }
 
       return AuthResponse(success: true, user: userAccount, error: null);
     } catch (e) {
@@ -249,6 +264,11 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid != null) {
+      await DeviceSessionService.instance.releaseSession(uid);
+    }
+    DeviceSessionService.instance.stopWatching();
     await _auth.signOut();
   }
 
@@ -408,5 +428,43 @@ class AuthService {
     final doc = await FirebaseFirestore.instance.collection('users').doc(fb.uid).get();
     if (!doc.exists) return null;
     return _userFromDoc(doc);
+  }
+
+  /// Updates display name and phone on Firestore user profile.
+  Future<AuthResponse> updateProfile({
+    required String fullName,
+    String? phone,
+  }) async {
+    final trimmedName = fullName.trim();
+    if (trimmedName.isEmpty) {
+      return const AuthResponse(success: false, error: 'Full name is required');
+    }
+
+    final fb = _auth.currentUser;
+    if (fb == null) {
+      return const AuthResponse(success: false, error: 'No active session');
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(fb.uid).set({
+        'fullName': trimmedName,
+        if (phone != null) 'phone': phone.trim().isEmpty ? null : phone.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      try {
+        await fb.updateDisplayName(trimmedName);
+      } catch (_) {}
+
+      final user = await refreshCurrentUserProfile();
+      if (user == null) {
+        return const AuthResponse(success: false, error: 'Profile not found');
+      }
+      return AuthResponse(success: true, user: user, message: 'Profile updated');
+    } on FirebaseException catch (e) {
+      return AuthResponse(success: false, error: e.message ?? e.code);
+    } catch (e) {
+      return AuthResponse(success: false, error: e.toString());
+    }
   }
 }

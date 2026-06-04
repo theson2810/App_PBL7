@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../models/models.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/alert_repository.dart';
+import '../../repositories/camera_repository.dart';
+import '../../repositories/family_repository.dart';
+import '../../utils/log_mapper.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
 
   const DashboardScreen({
     super.key,
-    required this.onSwitchApp,
     required this.languageProvider,
   });
 
@@ -42,160 +47,171 @@ class _DashboardScreenState extends State<DashboardScreen>
     return ListenableBuilder(
       listenable: widget.languageProvider,
       builder: (context, _) {
+        final loc = AppLocalizations.of(context);
         return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryDark,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Clinical Sentinel',
-              style: TextStyle(
+              loc.appNameServer,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
             ),
             Text(
-              'System Overview',
-              style: TextStyle(color: Colors.white70, fontSize: 11),
+              loc.translate('system_overview'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {},
-          ),
-          GestureDetector(
-            onTap: widget.onSwitchApp,
-            child: Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white30),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 14),
-                  SizedBox(width: 4),
-                  Text(
-                    'Client',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        actions: const [],
       ),
-      body: RefreshIndicator(
-        color: AppTheme.primary,
-        onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // System status banner
-              _SystemStatusBanner(
-                pulseAnim: _pulseController,
-              ),
-              const SizedBox(height: 14),
-
-              // Stat grid
-              Row(
-                children: const [
-                  Expanded(
-                    child: StatCard(
-                      value: '3',
-                      label: 'Cameras Active',
-                      icon: Icons.videocam_rounded,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: StatCard(
-                      value: 'ON',
-                      label: 'AI Processing',
-                      icon: Icons.smart_toy_rounded,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: const [
-                  Expanded(
-                    child: StatCard(
-                      value: '18.4',
-                      label: 'MB/s Bandwidth',
-                      icon: Icons.network_check_rounded,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: StatCard(
-                      value: '84%',
-                      label: 'Storage Used',
-                      icon: Icons.storage_rounded,
-                      iconColor: Color(0xFFF57F17),
-                      bgColor: Color(0xFFFFF8E1),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Network Telemetry
-              const SectionHeader(title: 'Network Telemetry'),
-              _NetworkTelemetryCard(),
-              const SizedBox(height: 6),
-
-              // AI Detection
-              const SectionHeader(title: 'AI Detection Modules'),
-              _AiDetectionCard(),
-              const SizedBox(height: 6),
-
-              // Recent Logs
-              const SectionHeader(title: 'Recent Logs'),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 4,
-                  ),
-                  child: Column(
-                    children: mockLogs
-                        .take(4)
-                        .map(
-                          (e) => Column(
-                            children: [
-                              LogItemWidget(entry: e),
-                              if (e != mockLogs.take(4).last)
-                                const Divider(height: 1),
-                            ],
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 80),
-            ],
-          ),
-        ),
-      ),
+      body: _DashboardBody(pulseAnim: _pulseController),
         );
       },
+    );
+  }
+}
+
+class _DashboardBody extends StatelessWidget {
+  final Animation<double> pulseAnim;
+
+  const _DashboardBody({required this.pulseAnim});
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final familyId = context.watch<AuthProvider>().user?.familyId;
+    if (familyId == null || familyId.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(loc.translate('dashboard_no_family')),
+        ),
+      );
+    }
+
+    final alertRepo = AlertRepository();
+    final cameraRepo = CameraRepository();
+    final familyRepo = FamilyRepository();
+
+    return RefreshIndicator(
+      color: AppTheme.primary,
+      onRefresh: () async {
+        await context.read<AuthProvider>().authService.refreshCurrentUserProfile();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SystemStatusBanner(pulseAnim: pulseAnim),
+            const SizedBox(height: 14),
+            StreamBuilder(
+              stream: cameraRepo.getCameras(familyId),
+              builder: (context, camSnap) {
+                final cameras = camSnap.data ?? [];
+                final online = cameras.where((c) => c.status == 'online').length;
+                return StreamBuilder(
+                  stream: alertRepo.listenAlerts(familyId),
+                  builder: (context, alertSnap) {
+                    final alerts = alertSnap.data ?? [];
+                    final activeAlerts =
+                        alerts.where((a) => a.status == 'active').length;
+                    return StreamBuilder(
+                      stream: familyRepo.getMembers(familyId),
+                      builder: (context, memberSnap) {
+                        final members = memberSnap.data?.length ?? 0;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: StatCard(
+                                    value: '${cameras.length}',
+                                    label: loc.translate('stat_cameras'),
+                                    icon: Icons.videocam_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: StatCard(
+                                    value: '$online',
+                                    label: loc.translate('stat_online'),
+                                    icon: Icons.wifi_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: StatCard(
+                                    value: '$activeAlerts',
+                                    label: loc.translate('stat_active_alerts'),
+                                    icon: Icons.warning_amber_rounded,
+                                    iconColor: AppTheme.errorColor,
+                                    bgColor: const Color(0xFFFFEBEE),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: StatCard(
+                                    value: '$members',
+                                    label: loc.translate('stat_family_members'),
+                                    icon: Icons.group_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SectionHeader(title: loc.translate('recent_alerts')),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 4,
+                                ),
+                                child: alerts.isEmpty
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Text(loc.translate('no_alerts_yet')),
+                                      )
+                                    : Column(
+                                        children: alertsToLogs(alerts.take(5).toList())
+                                            .map(
+                                              (e) => Column(
+                                                children: [
+                                                  LogItemWidget(entry: e),
+                                                  if (e != alertsToLogs(alerts.take(5).toList()).last)
+                                                    const Divider(height: 1),
+                                                ],
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -207,6 +223,7 @@ class _SystemStatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -237,9 +254,9 @@ class _SystemStatusBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'System Online',
-                  style: TextStyle(
+                Text(
+                  loc.translate('system_online'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -257,9 +274,9 @@ class _SystemStatusBanner extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    const Text(
-                      'Uptime: 14d 02h 45m',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    Text(
+                      loc.translate('uptime_sample'),
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
                     ),
                   ],
                 ),
@@ -276,9 +293,9 @@ class _SystemStatusBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: AppTheme.primaryLight.withOpacity(0.4)),
                 ),
-                child: const Text(
-                  '● ACTIVE',
-                  style: TextStyle(
+                child: Text(
+                  loc.translate('status_active'),
+                  style: const TextStyle(
                     color: Color(0xFF69F0AE),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -286,9 +303,9 @@ class _SystemStatusBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'AI v4.2.1',
-                style: TextStyle(color: Colors.white54, fontSize: 10),
+              Text(
+                loc.translate('monitoring_label'),
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
               ),
             ],
           ),

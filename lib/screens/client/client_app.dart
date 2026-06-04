@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/invite_link_provider.dart';
+import '../../providers/wifi_join_link_provider.dart';
+import '../../repositories/alert_repository.dart';
+import '../../models/alert_model.dart' as firestore;
 import 'home_screen.dart';
 import 'alerts_screen.dart';
 import 'family_screen.dart';
 import 'profile_screen.dart';
 
 class ClientApp extends StatefulWidget {
-  final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
   final VoidCallback? onLogout;
 
   const ClientApp({
     super.key,
-    required this.onSwitchApp,
     required this.languageProvider,
     this.onLogout,
   });
@@ -25,25 +29,49 @@ class ClientApp extends StatefulWidget {
 
 class _ClientAppState extends State<ClientApp> {
   int _currentIndex = 0;
+  final _alertRepo = AlertRepository();
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<InviteLinkProvider>().ensureRestored();
+      await context.read<WifiJoinLinkProvider>().ensureRestored();
+      if (!mounted) return;
+      _openFamilyIfPendingJoin();
+    });
     _screens = [
-      HomeScreen(onSwitchApp: widget.onSwitchApp),
+      const HomeScreen(),
       const AlertsScreen(),
       const ClientFamilyScreen(),
       ProfileScreen(
-        onSwitchApp: widget.onSwitchApp,
         languageProvider: widget.languageProvider,
+        onLogout: widget.onLogout,
       ),
     ];
   }
 
+  int _activeAlertCount(List<firestore.AlertModel> alerts) {
+    return alerts.where((a) => a.status == 'active').length;
+  }
+
+  void _openFamilyIfPendingJoin() {
+    if (!mounted) return;
+    final hasInvite = context.read<InviteLinkProvider>().hasPendingInvite;
+    final hasWifi = context.read<WifiJoinLinkProvider>().hasPendingWifiJoin;
+    if (hasInvite || hasWifi) {
+      setState(() => _currentIndex = 2);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final familyId = context.watch<AuthProvider>().user?.familyId;
+    context.watch<InviteLinkProvider>();
+    context.watch<WifiJoinLinkProvider>();
+
     return ListenableBuilder(
       listenable: widget.languageProvider,
       builder: (context, _) {
@@ -82,14 +110,8 @@ class _ClientAppState extends State<ClientApp> {
                   label: AppLocalizations.of(context).navHome,
                 ),
                 NavigationDestination(
-                  icon: Badge(
-                    label: const Text('3'),
-                    child: const Icon(Icons.notifications_outlined),
-                  ),
-                  selectedIcon: Badge(
-                    label: const Text('3'),
-                    child: const Icon(Icons.notifications_rounded),
-                  ),
+                  icon: _alertsNavIcon(familyId, false),
+                  selectedIcon: _alertsNavIcon(familyId, true),
                   label: AppLocalizations.of(context).navAlerts,
                 ),
                 NavigationDestination(
@@ -105,6 +127,25 @@ class _ClientAppState extends State<ClientApp> {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _alertsNavIcon(String? familyId, bool selected) {
+    final base = Icon(
+      selected ? Icons.notifications_rounded : Icons.notifications_outlined,
+    );
+    if (familyId == null || familyId.isEmpty) return base;
+
+    return StreamBuilder<List<firestore.AlertModel>>(
+      stream: _alertRepo.listenAlerts(familyId),
+      builder: (context, snapshot) {
+        final count = _activeAlertCount(snapshot.data ?? []);
+        if (count <= 0) return base;
+        return Badge(
+          label: Text(count > 99 ? '99+' : '$count'),
+          child: base,
         );
       },
     );

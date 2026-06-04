@@ -2,18 +2,23 @@ import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
 
 // PROVIDERS
 import 'providers/auth_provider.dart';
+import 'providers/invite_link_provider.dart';
+import 'providers/wifi_join_link_provider.dart';
 
 // SERVICES
+import 'services/deep_link_service.dart';
 import 'services/notification_service.dart';
 
 // UI
 import 'theme/app_theme.dart';
+import 'localization/app_localization.dart';
 import 'localization/language_provider.dart';
 import 'screens/auth_gate.dart';
 
@@ -76,15 +81,74 @@ class _ElderlyCareAppState extends State<ElderlyCareApp> {
   }
 
   @override
+  void dispose() {
+    DeepLinkService.instance.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
-      child: MaterialApp(
-        title: 'Vital Horizon',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        home: AuthGate(languageProvider: _languageProvider),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => InviteLinkProvider()),
+        ChangeNotifierProvider(create: (_) => WifiJoinLinkProvider()),
+      ],
+      child: _AppBootstrap(
+        languageProvider: _languageProvider,
+        child: ListenableBuilder(
+          listenable: _languageProvider,
+          builder: (context, _) {
+            return MaterialApp(
+              title: 'Vital Horizon',
+              debugShowCheckedModeBanner: false,
+              locale: _languageProvider.locale,
+              localizationsDelegates: const [
+                AppLocalizationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en'),
+                Locale('vi'),
+              ],
+              theme: AppTheme.theme,
+              home: AuthGate(languageProvider: _languageProvider),
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+class _AppBootstrap extends StatefulWidget {
+  final LanguageProvider languageProvider;
+  final Widget child;
+
+  const _AppBootstrap({
+    required this.languageProvider,
+    required this.child,
+  });
+
+  @override
+  State<_AppBootstrap> createState() => _AppBootstrapState();
+}
+
+class _AppBootstrapState extends State<_AppBootstrap> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await DeepLinkService.instance.start(
+        context.read<InviteLinkProvider>(),
+        wifiJoinProvider: context.read<WifiJoinLinkProvider>(),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

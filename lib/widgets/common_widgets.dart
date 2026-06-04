@@ -325,8 +325,14 @@ class CameraThumbCard extends StatelessWidget {
 class AlertCard extends StatelessWidget {
   final AlertModel alert;
   final VoidCallback? onViewRecording;
+  final VoidCallback? onDismiss;
 
-  const AlertCard({super.key, required this.alert, this.onViewRecording});
+  const AlertCard({
+    super.key,
+    required this.alert,
+    this.onViewRecording,
+    this.onDismiss,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -437,18 +443,28 @@ class AlertCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: onViewRecording,
-                  icon: const Icon(Icons.play_circle_outline, size: 14),
-                  label: const Text('View Recording'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                if (onDismiss != null)
+                  OutlinedButton(
+                    onPressed: onDismiss,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      textStyle: const TextStyle(fontSize: 11),
                     ),
-                    textStyle: const TextStyle(fontSize: 11),
+                    child: const Text('Resolve'),
+                  )
+                else
+                  ElevatedButton.icon(
+                    onPressed: onViewRecording,
+                    icon: const Icon(Icons.play_circle_outline, size: 14),
+                    label: const Text('View Recording'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(fontSize: 11),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

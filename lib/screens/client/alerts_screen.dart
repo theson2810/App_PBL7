@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
 import '../../localization/app_localization.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/alert_repository.dart';
+import '../../utils/alert_ui_mapper.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -14,7 +18,7 @@ class AlertsScreen extends StatefulWidget {
 class _AlertsScreenState extends State<AlertsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  AlertSeverity? _filterSeverity;
+  final _alertRepo = AlertRepository();
 
   @override
   void initState() {
@@ -28,9 +32,66 @@ class _AlertsScreenState extends State<AlertsScreen>
     super.dispose();
   }
 
+  Future<void> _resolveAlert(String alertId) async {
+    await _alertRepo.resolveAlert(alertId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+        content: Text(AppLocalizations.of(context).translate('alert_resolved')),
+        backgroundColor: AppTheme.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _resolveAllActive(List<AlertModel> active) async {
+    for (final a in active) {
+      await _alertRepo.resolveAlert(a.id);
+    }
+    if (!mounted) return;
+    _markAllRead(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final loc = AppLocalizations.of(context);
+    final familyId = context.watch<AuthProvider>().user?.familyId;
+
+    if (familyId == null || familyId.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.surface,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFB71C1C),
+          title: Text(loc.alertsTitle),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              loc.translate('join_family_for_alerts'),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder(
+      stream: _alertRepo.listenAlerts(familyId),
+      builder: (context, snapshot) {
+        final allUi = toUiAlerts(snapshot.data ?? []);
+        final fireActive = snapshot.data?.where((a) => a.status == 'active').toList() ?? [];
+        final fireResolved = snapshot.data?.where((a) => a.status == 'resolved').toList() ?? [];
+        final activeUi = toUiAlerts(fireActive);
+        final historyUi = toUiAlerts(fireResolved);
+
+        final emergency = activeUi
+            .where((a) =>
+                a.severity == AlertSeverity.emergency ||
+                a.severity == AlertSeverity.high)
+            .toList();
+
+        return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: const Color(0xFFB71C1C),
@@ -45,9 +106,9 @@ class _AlertsScreenState extends State<AlertsScreen>
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const Text(
-              'Recent detections — Safety is our priority',
-              style: TextStyle(color: Colors.white70, fontSize: 11),
+            Text(
+              loc.translate('alerts_subtitle'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ],
         ),
@@ -58,7 +119,9 @@ class _AlertsScreenState extends State<AlertsScreen>
           ),
           IconButton(
             icon: const Icon(Icons.mark_chat_read_outlined, color: Colors.white),
-            onPressed: () => _markAllRead(context),
+            onPressed: activeUi.isEmpty
+                ? null
+                : () => _resolveAllActive(activeUi),
           ),
         ],
         bottom: TabBar(
@@ -76,7 +139,7 @@ class _AlertsScreenState extends State<AlertsScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('All'),
+                  Text(loc.translate('tab_all')),
                   const SizedBox(width: 5),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -88,41 +151,44 @@ class _AlertsScreenState extends State<AlertsScreen>
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${mockAlerts.length}',
+                      '${allUi.length}',
                       style: const TextStyle(fontSize: 10),
                     ),
                   ),
                 ],
               ),
             ),
-            const Tab(text: 'Emergency'),
-            const Tab(text: 'History'),
+            Tab(text: loc.translate('tab_emergency')),
+            Tab(text: loc.translate('tab_history')),
           ],
           onTap: (_) => setState(() {}),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _AlertListView(
-            alerts: mockAlerts,
-            history: mockHistory,
-          ),
-          _AlertListView(
-            alerts: mockAlerts
-                .where((a) =>
-                    a.severity == AlertSeverity.emergency ||
-                    a.severity == AlertSeverity.high)
-                .toList(),
-            history: [],
-          ),
-          _AlertListView(
-            alerts: [],
-            history: mockHistory,
-            historyTitle: 'All History',
-          ),
-        ],
-      ),
+      body: snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _AlertListView(
+                  alerts: activeUi,
+                  history: historyUi,
+                  onResolve: _resolveAlert,
+                ),
+                _AlertListView(
+                  alerts: emergency,
+                  history: [],
+                  onResolve: _resolveAlert,
+                ),
+                _AlertListView(
+                  alerts: [],
+                  history: historyUi,
+                  historyTitle: loc.translate('tab_history'),
+                  onResolve: _resolveAlert,
+                ),
+              ],
+            ),
+        );
+      },
     );
   }
 
@@ -140,7 +206,7 @@ class _AlertsScreenState extends State<AlertsScreen>
   void _markAllRead(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('All alerts marked as read'),
+        content: Text(AppLocalizations.of(context).translate('mark_all_resolved')),
         backgroundColor: AppTheme.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -154,11 +220,13 @@ class _AlertListView extends StatelessWidget {
   final List<AlertModel> alerts;
   final List<AlertModel> history;
   final String historyTitle;
+  final Future<void> Function(String alertId)? onResolve;
 
   const _AlertListView({
     required this.alerts,
     required this.history,
     this.historyTitle = 'Earlier History',
+    this.onResolve,
   });
 
   @override
@@ -174,18 +242,18 @@ class _AlertListView extends StatelessWidget {
               color: AppTheme.primaryLight.withOpacity(0.5),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'No alerts in this category',
-              style: TextStyle(
+            Text(
+              AppLocalizations.of(context).translate('no_alerts_category'),
+              style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Everything looks safe',
-              style: TextStyle(
+            Text(
+              AppLocalizations.of(context).translate('all_safe'),
+              style: const TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 13,
               ),
@@ -212,6 +280,7 @@ class _AlertListView extends StatelessWidget {
           ...alerts.map((a) => AlertCard(
                 alert: a,
                 onViewRecording: () {},
+                onDismiss: onResolve != null ? () => onResolve!(a.id) : null,
               )),
         ],
         if (history.isNotEmpty) ...[
@@ -240,6 +309,7 @@ class _EmergencyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -267,9 +337,9 @@ class _EmergencyBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'EMERGENCY ALERT',
-                  style: TextStyle(
+                Text(
+                  loc.translate('emergency_alert'),
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                     color: AppTheme.errorColor,
@@ -302,7 +372,7 @@ class _EmergencyBanner extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               textStyle: const TextStyle(fontSize: 11),
             ),
-            child: const Text('Respond'),
+            child: Text(loc.translate('respond')),
           ),
         ],
       ),
@@ -353,11 +423,27 @@ class _FilterSheet extends StatefulWidget {
 }
 
 class _FilterSheetState extends State<_FilterSheet> {
-  String _selectedSeverity = 'All';
-  String _selectedPeriod = 'Today';
+  String? _selectedSeverity;
+  String? _selectedPeriod;
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    _selectedSeverity ??= loc.translate('severity_all');
+    _selectedPeriod ??= loc.translate('period_today');
+    final severities = [
+      loc.translate('severity_all'),
+      loc.translate('severity_emergency'),
+      loc.translate('severity_high'),
+      loc.translate('severity_medium'),
+      loc.translate('severity_notice'),
+    ];
+    final periods = [
+      loc.translate('period_today'),
+      loc.translate('period_week'),
+      loc.translate('period_month'),
+      loc.translate('period_all'),
+    ];
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(
@@ -372,19 +458,19 @@ class _FilterSheetState extends State<_FilterSheet> {
                 color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          const Text(
-            'Filter Alerts',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          Text(
+            loc.translate('filter_alerts'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Severity',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+          Text(
+            loc.translate('severity'),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: ['All', 'Emergency', 'High', 'Medium', 'Notice']
+            children: severities
                 .map((s) => ChoiceChip(
                       label: Text(s),
                       selected: _selectedSeverity == s,
@@ -394,14 +480,14 @@ class _FilterSheetState extends State<_FilterSheet> {
                 .toList(),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Time Period',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+          Text(
+            loc.translate('time_period'),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: ['Today', 'This Week', 'This Month', 'All Time']
+            children: periods
                 .map((p) => ChoiceChip(
                       label: Text(p),
                       selected: _selectedPeriod == p,
@@ -416,14 +502,14 @@ class _FilterSheetState extends State<_FilterSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Reset'),
+                  child: Text(loc.translate('reset')),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Apply Filter'),
+                  child: Text(loc.translate('apply_filter')),
                 ),
               ),
             ],

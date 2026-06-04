@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/auth_models.dart';
 import '../providers/auth_provider.dart';
+import '../localization/app_localization.dart';
 import '../localization/language_provider.dart';
 import 'client/welcome_screen.dart';
 import 'client/email_verification_screen.dart';
@@ -54,7 +55,7 @@ class _AuthGateState extends State<AuthGate> {
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              const Text('Loading...'),
+              Text(AppLocalizations.of(context).translate('loading_app')),
             ],
           ),
         ),
@@ -84,6 +85,19 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         if (!authProvider.isAuthenticated) {
+          if (authProvider.kickedByOtherDevice) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!context.mounted) return;
+              final loc = AppLocalizations.of(context);
+              authProvider.clearKickedFlag();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(loc.translate('device_session_kicked')),
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            });
+          }
           return const WelcomeScreen();
         }
 
@@ -96,13 +110,13 @@ class _AuthGateState extends State<AuthGate> {
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
-                  const Text('Loading...'),
+                  Text(AppLocalizations.of(context).translate('loading_app')),
                   const SizedBox(height: 32),
                   ElevatedButton(
                     onPressed: () {
                       authProvider.logout();
                     },
-                    child: const Text('Back to Login'),
+                    child: Text(AppLocalizations.of(context).translate('back_to_login')),
                   ),
                 ],
               ),
@@ -115,13 +129,11 @@ class _AuthGateState extends State<AuthGate> {
         return isServerApp
             ? ServerApp(
                 key: const ValueKey('server'),
-                onSwitchApp: () {},
                 languageProvider: widget.languageProvider,
                 onLogout: () => authProvider.logout(),
               )
             : ClientApp(
                 key: const ValueKey('client'),
-                onSwitchApp: () {},
                 languageProvider: widget.languageProvider,
                 onLogout: () => authProvider.logout(),
               );

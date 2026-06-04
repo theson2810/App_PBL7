@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/family_member_model.dart';
+import '../utils/wifi_match_helper.dart';
+import 'wifi_network_service.dart';
 
 /// Firestore-backed family flows:
 /// - One admin per family (`families.adminUid`).
@@ -31,6 +33,43 @@ class FamilyService {
     if (v is DateTime) return v;
     if (v is Timestamp) return v.toDate();
     return DateTime.tryParse(v.toString()) ?? DateTime.now();
+  }
+
+  /// Active member may belong to at most one family ([exceptFamilyId] allowed).
+  Future<void> _ensureSingleFamilyMembership(
+    String uid, {
+    String? exceptFamilyId,
+  }) async {
+    final memberships = await _firestore
+        .collection('family_members')
+        .where('userId', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .get();
+
+    for (final doc in memberships.docs) {
+      final fid = doc.data()['familyId'] as String? ?? '';
+      if (fid.isEmpty) continue;
+      if (exceptFamilyId != null && fid == exceptFamilyId) continue;
+      throw Exception('already_in_other_family');
+    }
+
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    final userFamilyId = userDoc.data()?['familyId'] as String?;
+    if (userFamilyId != null &&
+        userFamilyId.isNotEmpty &&
+        userFamilyId != exceptFamilyId) {
+      final stillMember = await _firestore
+          .collection('family_members')
+          .where('userId', isEqualTo: uid)
+          .where('familyId', isEqualTo: userFamilyId)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+      if (stillMember.docs.isNotEmpty &&
+          (exceptFamilyId == null || userFamilyId != exceptFamilyId)) {
+        throw Exception('already_in_other_family');
+      }
+    }
   }
 
   /// Returns true if this user is already admin of any family.
@@ -151,6 +190,8 @@ class FamilyService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('not_signed_in');
 
+    await _ensureSingleFamilyMembership(user.uid);
+
     final familyId = await _resolveFamilyIdFromCode(codeOrFamilyId);
     if (familyId == null) throw Exception('invalid_code');
 
@@ -226,6 +267,8 @@ class FamilyService {
     if (adminUid != admin.uid) throw Exception('not_admin');
 
     final joinCode = fam.data()?['joinCode'] as String? ?? '';
+
+    await _ensureSingleFamilyMembership(requesterUid, exceptFamilyId: familyId);
 
     final memberRef = _firestore.collection('family_members').doc();
     final userRef = _firestore.collection('users').doc(requesterUid);
@@ -348,6 +391,8 @@ class FamilyService {
       throw Exception('email_mismatch');
     }
 
+    await _ensureSingleFamilyMembership(user.uid, exceptFamilyId: familyId);
+
     DateTime exp;
     if (d['expiresAt'] != null) {
       exp = _asDateTime(d['expiresAt']);
@@ -424,7 +469,198 @@ class FamilyService {
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => FamilyMemberModel.fromFirestore(doc))
+            .where((m) => m.status == 'active')
             .toList());
+  }
+
+  static String buildWifiJoinUri(String sessionId) =>
+      'elderlycare://family-wifi-join?s=$sessionId';
+
+  /// Admin: create a 5-minute QR session tied to current Wi-Fi SSID.
+  Future<Map<String, dynamic>> createWifiJoinSession(String familyId) async {
+    final admin = _auth.currentUser;
+    if (admin == null) throw Exception('not_signed_in');
+
+    final fam = await _firestore.collection('families').doc(familyId).get();
+    if (!fam.exists) throw Exception('invalid_code');
+    final adminUid = fam.data()?['adminUid'] ?? fam.data()?['ownerId'];
+    if (adminUid != admin.uid) throw Exception('not_admin');
+
+    final adminUserRef = _firestore.collection('users').doc(admin.uid);
+    final adminUserSnap = await adminUserRef.get();
+    final lastQr = adminUserSnap.data()?['lastWifiQrCreatedAt'];
+    if (lastQr != null) {
+      final last = _asDateTime(lastQr);
+      if (DateTime.now().difference(last) < const Duration(minutes: 1)) {
+        throw Exception('qr_refresh_cooldown');
+      }
+    }
+
+    final network = await WifiNetworkService.instance.getCurrentNetwork();
+    if (!network.isValid) throw Exception('wifi_unavailable');
+
+    final expires = DateTime.now().add(const Duration(minutes: 5));
+    final docRef = _firestore.collection('family_wifi_join_sessions').doc();
+
+    await docRef.set({
+      'familyId': familyId,
+      'adminUid': admin.uid,
+      'networkId': network.ssidFingerprint,
+      'bssidId': network.bssidFingerprint ?? '',
+      'networkLabel': network.ssid.isNotEmpty ? network.ssid : 'Wi-Fi',
+      'status': 'active',
+      'expiresAt': Timestamp.fromDate(expires),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    await adminUserRef.set({
+      'lastWifiQrCreatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    final sessionId = docRef.id;
+    return {
+      'sessionId': sessionId,
+      'uri': buildWifiJoinUri(sessionId),
+      'networkLabel': network.ssid.isNotEmpty ? network.ssid : 'Wi-Fi',
+      'expiresAt': expires,
+    };
+  }
+
+  /// Member: join immediately when on the same Wi-Fi as the admin QR session.
+  Future<String> joinFamilyViaWifiSession(String sessionId) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('not_signed_in');
+
+    final network = await WifiNetworkService.instance.getCurrentNetwork();
+    if (!network.isValid) throw Exception('wifi_unavailable');
+
+    final sessionRef =
+        _firestore.collection('family_wifi_join_sessions').doc(sessionId.trim());
+
+    final sessionSnap = await sessionRef.get();
+    if (!sessionSnap.exists) throw Exception('invalid_session');
+
+    final data = sessionSnap.data()!;
+    if (data['status'] != 'active') throw Exception('session_used');
+
+    final exp = _asDateTime(data['expiresAt']);
+    if (DateTime.now().isAfter(exp)) throw Exception('session_expired');
+
+    if (!WifiMatchHelper.matches(
+      sessionSsidFp: data['networkId'] as String?,
+      sessionBssidFp: data['bssidId'] as String?,
+      member: network,
+    )) {
+      throw Exception('wifi_mismatch');
+    }
+
+    final familyId = data['familyId'] as String;
+    final adminUid = data['adminUid'] as String;
+    if (user.uid == adminUid) throw Exception('cannot_join_own_family');
+
+    await _ensureSingleFamilyMembership(user.uid, exceptFamilyId: familyId);
+
+    final existingMember = await _firestore
+        .collection('family_members')
+        .where('familyId', isEqualTo: familyId)
+        .where('userId', isEqualTo: user.uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (existingMember.docs.isNotEmpty) throw Exception('already_member');
+
+    final fam = await _firestore.collection('families').doc(familyId).get();
+    if (!fam.exists) throw Exception('invalid_session');
+    final joinCode = fam.data()?['joinCode'] as String? ?? '';
+
+    final memberRef = _firestore.collection('family_members').doc();
+    final userRef = _firestore.collection('users').doc(user.uid);
+
+    await _firestore.runTransaction((tx) async {
+      final freshSession = await tx.get(sessionRef);
+      if (!freshSession.exists) throw Exception('invalid_session');
+      final fresh = freshSession.data()!;
+      if (fresh['status'] != 'active') throw Exception('session_used');
+      final freshExp = _asDateTime(fresh['expiresAt']);
+      if (DateTime.now().isAfter(freshExp)) throw Exception('session_expired');
+      if (!WifiMatchHelper.matches(
+        sessionSsidFp: fresh['networkId'] as String?,
+        sessionBssidFp: fresh['bssidId'] as String?,
+        member: network,
+      )) {
+        throw Exception('wifi_mismatch');
+      }
+
+      tx.update(sessionRef, {
+        'status': 'used',
+        'usedByUid': user.uid,
+        'usedAt': FieldValue.serverTimestamp(),
+      });
+
+      tx.set(memberRef, {
+        'familyId': familyId,
+        'userId': user.uid,
+        'role': 'member',
+        'status': 'active',
+        'email': user.email,
+        'displayName': user.displayName ?? user.email ?? '',
+        'joinedVia': 'wifi_qr',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      tx.set(
+        userRef,
+        {
+          'familyId': familyId,
+          'familyCode': joinCode,
+        },
+        SetOptions(merge: true),
+      );
+    });
+
+    return familyId;
+  }
+
+  /// Admin removes a non-admin member from the family.
+  Future<void> removeFamilyMember(String familyId, String memberUserId) async {
+    final admin = _auth.currentUser;
+    if (admin == null) throw Exception('not_signed_in');
+
+    final fam = await _firestore.collection('families').doc(familyId).get();
+    if (!fam.exists) throw Exception('invalid_code');
+    final adminUid = fam.data()?['adminUid'] ?? fam.data()?['ownerId'];
+    if (adminUid != admin.uid) throw Exception('not_admin');
+    if (memberUserId == adminUid) throw Exception('cannot_remove_admin');
+
+    final memberQ = await _firestore
+        .collection('family_members')
+        .where('familyId', isEqualTo: familyId)
+        .where('userId', isEqualTo: memberUserId)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberQ.docs.isEmpty) throw Exception('member_not_found');
+
+    final memberDoc = memberQ.docs.first;
+    if ((memberDoc.data()['role'] as String?) == 'admin') {
+      throw Exception('cannot_remove_admin');
+    }
+
+    await _firestore.runTransaction((tx) async {
+      tx.update(memberDoc.reference, {
+        'status': 'removed',
+        'removedAt': FieldValue.serverTimestamp(),
+        'removedBy': admin.uid,
+      });
+      tx.set(
+        _firestore.collection('users').doc(memberUserId),
+        {
+          'familyId': FieldValue.delete(),
+          'familyCode': FieldValue.delete(),
+        },
+        SetOptions(merge: true),
+      );
+    });
   }
 
   Future<String?> getInviteCode(String familyId) async {

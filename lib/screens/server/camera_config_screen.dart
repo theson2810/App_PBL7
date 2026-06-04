@@ -1,93 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../localization/app_localization.dart';
 import '../../theme/app_theme.dart';
-import '../../models/models.dart';
+import '../../models/camera_model.dart' as fs;
 import '../../widgets/common_widgets.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/camera_repository.dart';
 
 class CameraConfigScreen extends StatelessWidget {
   const CameraConfigScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      appBar: SubtitleAppBar(
-        title: 'Camera Configuration',
-        subtitle: 'Define AI monitoring zones for patient safety',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Add camera button
-            ElevatedButton.icon(
-              onPressed: () => _showAddCameraSheet(context),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Add New Camera'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Stats row
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Total Cameras',
-                    value: '${mockCameras.length}',
-                    icon: Icons.videocam_rounded,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Online',
-                    value: '${mockCameras.where((c) => c.status == CameraStatus.live).length}',
-                    icon: Icons.wifi_rounded,
-                    valueColor: AppTheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'Offline',
-                    value: '${mockCameras.where((c) => c.status == CameraStatus.offline).length}',
-                    icon: Icons.wifi_off_rounded,
-                    valueColor: AppTheme.errorColor,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Camera list
-            const SectionHeader(title: 'Configured Cameras'),
-            ...mockCameras.map((cam) => _CameraConfigCard(camera: cam)),
-            const SizedBox(height: 16),
-
-            // AI Insights
-            const SectionHeader(title: 'AI Insights'),
-            _AiInsightsCard(),
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddCameraSheet(BuildContext context) {
+  void _showAddCameraSheet(BuildContext context, String familyId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -97,8 +20,114 @@ class CameraConfigScreen extends StatelessWidget {
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: const _AddCameraSheet(),
+        child: _AddCameraSheet(familyId: familyId),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final familyId = context.watch<AuthProvider>().user?.familyId;
+    final cameraRepo = CameraRepository();
+
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      appBar: SubtitleAppBar(
+        title: loc.cameraConfig,
+        subtitle: loc.translate('camera_config_subtitle'),
+      ),
+      body: familyId == null || familyId.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(loc.translate('create_family_before_camera')),
+              ),
+            )
+          : StreamBuilder<List<fs.CameraModel>>(
+              stream: cameraRepo.getCameras(familyId),
+              builder: (context, snapshot) {
+                final cameras = snapshot.data ?? [];
+                final online = cameras.where((c) => c.status == 'online').length;
+                final offline = cameras.length - online;
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _showAddCameraSheet(context, familyId),
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        label: Text(loc.translate('add_new_camera')),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 46),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniStat(
+                              label: loc.translate('stat_total'),
+                              value: '${cameras.length}',
+                              icon: Icons.videocam_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _MiniStat(
+                              label: loc.translate('stat_online'),
+                              value: '$online',
+                              icon: Icons.wifi_rounded,
+                              valueColor: AppTheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _MiniStat(
+                              label: loc.translate('stat_offline'),
+                              value: '$offline',
+                              icon: Icons.wifi_off_rounded,
+                              valueColor: AppTheme.errorColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SectionHeader(title: loc.translate('configured_cameras')),
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          !snapshot.hasData)
+                        const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (cameras.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            loc.translate('no_cameras_chip_hint'),
+                            style: const TextStyle(color: AppTheme.textSecondary),
+                          ),
+                        )
+                      else
+                        ...cameras.map(
+                          (cam) => _CameraConfigCard(
+                            camera: cam,
+                            onToggleStatus: () async {
+                              final next =
+                                  cam.status == 'online' ? 'offline' : 'online';
+                              await cameraRepo.updateCameraStatus(cam.id, next);
+                            },
+                            onDelete: () => cameraRepo.deleteCamera(cam.id),
+                          ),
+                        ),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }
@@ -149,14 +178,22 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _CameraConfigCard extends StatelessWidget {
-  final CameraModel camera;
+  final fs.CameraModel camera;
+  final VoidCallback onToggleStatus;
+  final VoidCallback onDelete;
 
-  const _CameraConfigCard({required this.camera});
+  const _CameraConfigCard({
+    required this.camera,
+    required this.onToggleStatus,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isLive = camera.status == CameraStatus.live;
-    final isOffline = camera.status == CameraStatus.offline;
+    final loc = AppLocalizations.of(context);
+    final isLive = camera.status == 'online';
+    final isOffline = camera.status == 'offline';
+    final chipLabel = '${loc.translate('chip_prefix')} ${camera.chipId}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -194,7 +231,7 @@ class _CameraConfigCard extends StatelessWidget {
                         if (!isOffline) ...[
                           const SizedBox(height: 6),
                           Text(
-                            camera.resolution,
+                            chipLabel,
                             style: TextStyle(
                               fontSize: 10,
                               color: AppTheme.primaryLight.withOpacity(0.5),
@@ -220,7 +257,9 @@ class _CameraConfigCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        isLive ? 'LIVE' : 'OFFLINE',
+                        isLive
+                            ? loc.translate('camera_live')
+                            : loc.translate('camera_offline_badge'),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 9,
@@ -230,40 +269,6 @@ class _CameraConfigCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (camera.aiEnabled)
-                    Positioned(
-                      top: 8,
-                      left: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.smart_toy_rounded,
-                              size: 10,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 3),
-                            Text(
-                              'AI ON',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -300,7 +305,7 @@ class _CameraConfigCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            camera.location,
+                            chipLabel,
                             style: const TextStyle(
                               fontSize: 10,
                               color: Color(0xFF81C784),
@@ -311,43 +316,29 @@ class _CameraConfigCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (isOffline)
-                  _DarkButton(
-                    label: 'Reconnect',
-                    icon: Icons.refresh_rounded,
-                    color: AppTheme.errorColor,
-                    onTap: () {},
-                  )
-                else
-                  _DarkButton(
-                    label: 'AI Zone',
-                    icon: Icons.settings_suggest_rounded,
-                    color: AppTheme.primaryLight,
-                    onTap: () => _showAiZoneSheet(context, camera),
-                  ),
+                _DarkButton(
+                  label: isOffline
+                      ? loc.translate('mark_online')
+                      : loc.translate('mark_offline'),
+                  icon: Icons.sync_rounded,
+                  color: AppTheme.primaryLight,
+                  onTap: onToggleStatus,
+                ),
+                const SizedBox(width: 6),
+                _DarkButton(
+                  label: loc.translate('remove'),
+                  icon: Icons.delete_outline_rounded,
+                  color: AppTheme.errorColor,
+                  onTap: onDelete,
+                ),
               ],
             ),
           ),
-          if (isLive)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: _CpuLoadBar(load: camera.cpuLoad),
-            ),
         ],
       ),
     );
   }
 
-  void _showAiZoneSheet(BuildContext context, CameraModel cam) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _AiZoneSheet(camera: cam),
-    );
-  }
 }
 
 class _DarkButton extends StatelessWidget {
@@ -431,127 +422,53 @@ class _CpuLoadBar extends StatelessWidget {
   }
 }
 
-class _AiInsightsCard extends StatelessWidget {
+class _AddCameraSheet extends StatefulWidget {
+  final String familyId;
+
+  const _AddCameraSheet({required this.familyId});
+
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.primaryContainer, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.smart_toy_rounded, size: 18, color: AppTheme.primary),
-              SizedBox(width: 6),
-              Text(
-                'AI Insights',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.primaryDark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Update exclusion zones in Ward A to reduce false positives during shift rotations. 3 recommended zone adjustments detected.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.primaryDark,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _InsightMetric(
-                  label: 'Alerts Today',
-                  value: '24',
-                  icon: Icons.notifications_active_rounded,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _InsightMetric(
-                  label: 'System Uptime',
-                  value: '99.8%',
-                  icon: Icons.check_circle_outline_rounded,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _InsightMetric(
-                  label: 'Accuracy',
-                  value: '97.3%',
-                  icon: Icons.track_changes_rounded,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  State<_AddCameraSheet> createState() => _AddCameraSheetState();
 }
 
-class _InsightMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-
-  const _InsightMetric({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
+class _AddCameraSheetState extends State<_AddCameraSheet> {
+  final _nameCtrl = TextEditingController();
+  final _chipCtrl = TextEditingController();
+  bool _saving = false;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.primaryContainer),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 14, color: AppTheme.primary),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.primaryDark,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 9, color: AppTheme.primary),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
+  void dispose() {
+    _nameCtrl.dispose();
+    _chipCtrl.dispose();
+    super.dispose();
   }
-}
 
-class _AiZoneSheet extends StatelessWidget {
-  final CameraModel camera;
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    final chipId = _chipCtrl.text.trim();
+    if (name.isEmpty || chipId.isEmpty) return;
 
-  const _AiZoneSheet({required this.camera});
+    setState(() => _saving = true);
+    final id = await CameraRepository()
+        .addCamera(widget.familyId, chipId, name);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    final loc = AppLocalizations.of(context);
+    if (id != null) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(loc.translate('camera_registered'))),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(loc.translate('camera_add_failed'))),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(
@@ -570,123 +487,41 @@ class _AiZoneSheet extends StatelessWidget {
             ),
           ),
           Text(
-            'AI Zone — ${camera.name}',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+            loc.translate('add_camera_sheet_title'),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Configure detection zones and sensitivity thresholds.',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          const SizedBox(height: 8),
+          Text(
+            loc.translate('add_camera_sheet_help'),
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 16),
-          // Zone preview placeholder
-          Container(
-            height: 140,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A1A0A),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.crop_square_rounded, color: Color(0xFF4CAF50), size: 36),
-                  SizedBox(height: 6),
-                  Text(
-                    'Tap to draw AI detection zone',
-                    style: TextStyle(color: Color(0xFF81C784), fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Detection Sensitivity',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-          Slider(
-            value: 0.75,
-            onChanged: (_) {},
-            activeColor: AppTheme.primary,
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Save Zone'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddCameraSheet extends StatelessWidget {
-  const _AddCameraSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36, height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const Text(
-            'Add New Camera',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 16),
-          const TextField(
+          TextField(
+            controller: _nameCtrl,
             decoration: InputDecoration(
-              labelText: 'Camera Name',
-              prefixIcon: Icon(Icons.videocam_outlined),
+              labelText: loc.translate('camera_name_label'),
+              prefixIcon: const Icon(Icons.videocam_outlined),
             ),
           ),
           const SizedBox(height: 12),
-          const TextField(
+          TextField(
+            controller: _chipCtrl,
             decoration: InputDecoration(
-              labelText: 'IP Address / RTSP URL',
-              prefixIcon: Icon(Icons.link_rounded),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const TextField(
-            decoration: InputDecoration(
-              labelText: 'Location / Zone',
-              prefixIcon: Icon(Icons.location_on_outlined),
+              labelText: loc.translate('chip_device_id_label'),
+              prefixIcon: const Icon(Icons.memory_outlined),
             ),
           ),
           const SizedBox(height: 18),
           ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add Camera'),
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_rounded),
+            label: Text(loc.translate('add_new_camera')),
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 44),
             ),

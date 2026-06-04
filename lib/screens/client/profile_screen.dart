@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/edit_profile_sheet.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../models/auth_models.dart';
 
 class ProfileScreen extends StatefulWidget {
-  final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
   final VoidCallback? onLogout;
 
   const ProfileScreen({
     super.key,
-    required this.onSwitchApp,
     required this.languageProvider,
     this.onLogout,
   });
@@ -28,13 +28,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ListenableBuilder(
       listenable: widget.languageProvider,
       builder: (context, _) {
+        final loc = AppLocalizations.of(context);
+        final user = context.watch<AuthProvider>().user;
+
         return Scaffold(
           backgroundColor: AppTheme.surface,
           body: SingleChildScrollView(
             child: Column(
               children: [
-                // Profile header
-                _ProfileHeader(onSwitchApp: widget.onSwitchApp),
+                _ProfileHeader(user: user),
 
                 // Content
                 Padding(
@@ -52,54 +54,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         items: [
                           _SettingsItem(
                             icon: Icons.person_outline_rounded,
-                            label: 'Personal Information',
-                            subtitle: 'Eleanor Vance · eleanor@vitalhorizon.com',
-                            onTap: () {},
+                            label: loc.translate('personal_info'),
+                            subtitle: user != null
+                                ? '${user.fullName} · ${user.email}'
+                                : '—',
+                            onTap: user == null
+                                ? () {}
+                                : () => showEditProfileSheet(context, user: user),
                           ),
                           _SettingsItem(
                             icon: Icons.phonelink_rounded,
-                            label: 'Shared Devices',
-                            subtitle: 'Manage connected health monitors',
+                            label: loc.translate('shared_devices'),
+                            subtitle: loc.translate('shared_devices_sub'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.group_outlined,
-                            label: 'Family Members',
-                            subtitle: 'Complete your security circle',
-                            trailing: StatusBadge.green('3'),
+                            label: loc.translate('family_members_setting'),
+                            subtitle: loc.translate('family_members_sub'),
                             onTap: () {},
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 4),
-                      const SectionHeader(title: 'Monitoring'),
+                      SectionHeader(title: loc.translate('monitoring_section')),
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
                             icon: Icons.notifications_active_outlined,
-                            label: 'Alert Preferences',
-                            subtitle: 'Push, SMS & email settings',
+                            label: loc.translate('alert_preferences'),
+                            subtitle: loc.translate('alert_preferences_sub'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.schedule_rounded,
-                            label: 'Monitoring Schedule',
-                            subtitle: '24/7 continuous monitoring',
-                            trailing: StatusBadge.green('ON'),
+                            label: loc.translate('monitoring_schedule'),
+                            subtitle: loc.translate('monitoring_schedule_sub'),
+                            trailing: StatusBadge.green(loc.translate('monitoring_on')),
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.speed_rounded,
-                            label: 'AI Sensitivity',
-                            subtitle: 'Detection threshold: Medium',
+                            icon: Icons.family_restroom_outlined,
+                            label: loc.translate('family_code_label'),
+                            subtitle: user?.familyCode ??
+                                loc.translate('family_code_not_assigned'),
                             onTap: () {},
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 4),
-                      const SectionHeader(title: 'App'),
+                      SectionHeader(title: loc.translate('app_section')),
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
@@ -116,27 +122,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           _SettingsItem(
                             icon: Icons.settings_outlined,
-                            label: 'App Settings',
-                            subtitle: 'Theme, language & display',
+                            label: loc.translate('app_settings'),
+                            subtitle: loc.translate('app_settings_sub'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.security_rounded,
-                            label: 'Privacy & Security',
-                            subtitle: '2FA enabled · Data encrypted',
-                            trailing: StatusBadge.green('Secure'),
+                            label: loc.translate('privacy_security'),
+                            subtitle: loc.translate('privacy_sub'),
+                            trailing: StatusBadge.green(loc.translate('privacy_secure')),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.help_outline_rounded,
-                            label: 'Help & Support',
-                            subtitle: 'FAQ, guides & contact support',
+                            label: loc.translate('help_support'),
+                            subtitle: loc.translate('help_sub'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.info_outline_rounded,
-                            label: 'About',
-                            subtitle: 'Version 1.0.0 · Clinical Sentinel',
+                            label: loc.translate('about'),
+                            subtitle: loc.translate('about_sub'),
                             onTap: () {},
                           ),
                         ],
@@ -147,8 +153,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         items: [
                           _SettingsItem(
                             icon: Icons.logout_rounded,
-                            label: 'Logout',
-                            subtitle: 'Sign out of Vital Horizon',
+                            label: loc.logout,
+                            subtitle: loc.translate('logout_subtitle'),
                             iconColor: AppTheme.errorColor,
                             labelColor: AppTheme.errorColor,
                             showArrow: false,
@@ -169,22 +175,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showLogoutDialog(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Logout',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          loc.logout,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        content: const Text(
-          'Are you sure you want to log out? You will stop receiving real-time alerts.',
-          style: TextStyle(fontSize: 13, height: 1.5),
+        content: Text(
+          loc.translate('logout_confirm_message'),
+          style: const TextStyle(fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(loc.translate('cancel')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -195,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
             ),
-            child: const Text('Logout'),
+            child: Text(loc.logout),
           ),
         ],
       ),
@@ -204,9 +211,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  final VoidCallback onSwitchApp;
+  final UserAccount? user;
 
-  const _ProfileHeader({required this.onSwitchApp});
+  const _ProfileHeader({this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -226,58 +233,19 @@ class _ProfileHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Profile',
-                style: TextStyle(
+              Text(
+                AppLocalizations.of(context).translate('profile_header'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.edit_outlined,
-                      color: Colors.white70,
-                      size: 20,
-                    ),
-                    onPressed: () {},
-                  ),
-                  GestureDetector(
-                    onTap: onSwitchApp,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white30),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.swap_horiz_rounded,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Server',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 20),
+                onPressed: user == null
+                    ? null
+                    : () => showEditProfileSheet(context, user: user!),
               ),
             ],
           ),
@@ -316,18 +284,18 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Eleanor Vance',
-            style: TextStyle(
+          Text(
+            user?.fullName ?? 'Member',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'eleanor@vitalhorizon.com',
-            style: TextStyle(
+          Text(
+            user?.email ?? '',
+            style: const TextStyle(
               color: Colors.white60,
               fontSize: 12,
             ),

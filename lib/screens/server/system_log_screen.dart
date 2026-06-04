@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../localization/app_localization.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../providers/auth_provider.dart';
+import '../../repositories/alert_repository.dart';
+import '../../utils/log_mapper.dart';
 
 class SystemLogScreen extends StatefulWidget {
   const SystemLogScreen({super.key});
@@ -27,37 +32,56 @@ class _SystemLogScreenState extends State<SystemLogScreen>
     super.dispose();
   }
 
-  List<LogEntry> _filteredLogs(int tab) {
+  List<LogEntry> _filteredLogs(List<LogEntry> logs, int tab) {
     switch (tab) {
       case 1:
-        return mockLogs.where((l) => l.level == LogLevel.error).toList();
+        return logs.where((l) => l.level == LogLevel.error).toList();
       case 2:
-        return mockLogs.where((l) => l.level == LogLevel.warning).toList();
+        return logs.where((l) => l.level == LogLevel.warning).toList();
       default:
-        return mockLogs;
+        return logs;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final loc = AppLocalizations.of(context);
+    final familyId = context.watch<AuthProvider>().user?.familyId;
+
+    if (familyId == null || familyId.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppTheme.surface,
+        appBar: AppBar(
+          backgroundColor: AppTheme.primaryDark,
+          title: Text(loc.translate('operational_logs')),
+        ),
+        body: Center(child: Text(loc.translate('no_family_selected'))),
+      );
+    }
+
+    return StreamBuilder(
+      stream: AlertRepository().listenAlerts(familyId),
+      builder: (context, snapshot) {
+        final logs = alertsToLogs(snapshot.data ?? []);
+
+        return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
         backgroundColor: AppTheme.primaryDark,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Operational Logs',
-              style: TextStyle(
+              loc.translate('operational_logs'),
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
             ),
             Text(
-              'System Event Stream',
-              style: TextStyle(color: Colors.white70, fontSize: 11),
+              loc.translate('system_event_stream'),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ],
         ),
@@ -70,12 +94,14 @@ class _SystemLogScreenState extends State<SystemLogScreen>
               color: Colors.white,
             ),
             onPressed: () => setState(() => _autoScroll = !_autoScroll),
-            tooltip: _autoScroll ? 'Pause stream' : 'Resume stream',
+            tooltip: _autoScroll
+                ? loc.translate('pause_stream')
+                : loc.translate('resume_stream'),
           ),
           IconButton(
             icon: const Icon(Icons.download_rounded, color: Colors.white),
             onPressed: () {},
-            tooltip: 'Export logs',
+            tooltip: loc.translate('export_logs_tooltip'),
           ),
         ],
         bottom: TabBar(
@@ -88,10 +114,10 @@ class _SystemLogScreenState extends State<SystemLogScreen>
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
-          tabs: const [
-            Tab(text: 'All Activities'),
-            Tab(text: 'Errors'),
-            Tab(text: 'Warnings'),
+          tabs: [
+            Tab(text: loc.translate('tab_all_activities')),
+            Tab(text: loc.translate('tab_errors')),
+            Tab(text: loc.translate('tab_warnings')),
           ],
           onTap: (_) => setState(() {}),
         ),
@@ -108,7 +134,7 @@ class _SystemLogScreenState extends State<SystemLogScreen>
               controller: _tabController,
               children: List.generate(
                 3,
-                (i) => _LogListView(logs: _filteredLogs(i)),
+                (i) => _LogListView(logs: _filteredLogs(logs, i)),
               ),
             ),
           ),
@@ -119,6 +145,8 @@ class _SystemLogScreenState extends State<SystemLogScreen>
         backgroundColor: AppTheme.primary,
         child: const Icon(Icons.filter_list_rounded, color: Colors.white),
       ),
+        );
+      },
     );
   }
 }
@@ -126,6 +154,7 @@ class _SystemLogScreenState extends State<SystemLogScreen>
 class _ServerStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: AppTheme.surface2,
@@ -140,21 +169,21 @@ class _ServerStatusBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Sentinel AI v4.2.1 active & processing telemetry',
-                  style: TextStyle(
+                  loc.translate('event_stream_title'),
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.primaryDark,
                   ),
                 ),
                 Text(
-                  'Real-time analysis active across all nodes',
-                  style: TextStyle(
+                  loc.translate('event_stream_subtitle'),
+                  style: const TextStyle(
                     fontSize: 10,
                     color: AppTheme.primary,
                   ),
@@ -165,8 +194,8 @@ class _ServerStatusBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 '14d 02h',
                 style: TextStyle(
                   fontSize: 12,
@@ -175,16 +204,16 @@ class _ServerStatusBanner extends StatelessWidget {
                 ),
               ),
               Text(
-                'Uptime',
-                style: TextStyle(fontSize: 9, color: AppTheme.primary),
+                loc.translate('uptime_label'),
+                style: const TextStyle(fontSize: 9, color: AppTheme.primary),
               ),
             ],
           ),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 '14ms',
                 style: TextStyle(
                   fontSize: 12,
@@ -193,8 +222,8 @@ class _ServerStatusBanner extends StatelessWidget {
                 ),
               ),
               Text(
-                'Latency',
-                style: TextStyle(fontSize: 9, color: AppTheme.primary),
+                loc.translate('latency_label'),
+                style: const TextStyle(fontSize: 9, color: AppTheme.primary),
               ),
             ],
           ),
@@ -211,17 +240,18 @@ class _LogListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     if (logs.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle_outline_rounded,
+            const Icon(Icons.check_circle_outline_rounded,
                 size: 48, color: AppTheme.primaryLight),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
-              'No events in this category',
-              style: TextStyle(color: AppTheme.textSecondary),
+              loc.translate('no_events_category'),
+              style: const TextStyle(color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -239,7 +269,7 @@ class _LogListView extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: () {},
                 icon: const Icon(Icons.history_rounded, size: 16),
-                label: const Text('Load Historical Records'),
+                label: Text(loc.translate('load_historical')),
                 style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
               ),
             ),

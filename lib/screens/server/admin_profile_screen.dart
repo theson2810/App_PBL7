@@ -7,15 +7,14 @@ import '../../widgets/common_widgets.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/edit_profile_sheet.dart';
 
 class AdminProfileScreen extends StatefulWidget {
-  final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
   final VoidCallback? onLogout;
 
   const AdminProfileScreen({
     super.key,
-    required this.onSwitchApp,
     required this.languageProvider,
     this.onLogout,
   });
@@ -32,16 +31,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     return ListenableBuilder(
       listenable: widget.languageProvider,
       builder: (context, _) {
+        final loc = AppLocalizations.of(context);
         return Scaffold(
           backgroundColor: AppTheme.surface,
           body: SingleChildScrollView(
             child: Column(
               children: [
                 // Profile header
-                _ProfileHeader(
-                  user: user,
-                  onSwitchApp: widget.onSwitchApp,
-                ),
+                _ProfileHeader(user: user),
 
                 // Content
                 Padding(
@@ -55,27 +52,30 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                         items: [
                           _SettingsItem(
                             icon: Icons.person_outline_rounded,
-                            label: 'Personal Information',
+                            label: loc.translate('personal_info'),
                             subtitle: user?.email ?? 'admin@example.com',
-                            onTap: () {},
+                            onTap: user == null
+                                ? () {}
+                                : () => showEditProfileSheet(context, user: user),
                           ),
                           _SettingsItem(
                             icon: Icons.badge_outlined,
-                            label: 'Account Type',
-                            subtitle: 'Administrator',
+                            label: loc.translate('account_type_label'),
+                            subtitle: loc.translate('administrator_role'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.family_restroom_rounded,
-                            label: 'Family Code',
-                            subtitle: user?.familyCode ?? 'FAM-XXXXXXXX',
+                            label: loc.translate('family_code_label'),
+                            subtitle: user?.familyCode ??
+                                loc.translate('family_code_not_assigned'),
                             trailing: IconButton(
                               icon: const Icon(Icons.copy_rounded, size: 18),
                               onPressed: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'Copied: ${user?.familyCode}',
+                                      '${loc.translate('copied_label')}: ${user?.familyCode}',
                                     ),
                                   ),
                                 );
@@ -85,40 +85,44 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                           ),
                           _SettingsItem(
                             icon: Icons.phone_outlined,
-                            label: 'Contact',
-                            subtitle: user?.phone ?? 'Not set',
-                            onTap: () {},
+                            label: loc.translate('contact_label'),
+                            subtitle: user?.phone ?? loc.translate('not_set'),
+                            onTap: user == null
+                                ? () {}
+                                : () => showEditProfileSheet(context, user: user),
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 4),
-                      const SectionHeader(title: 'System'),
+                      SectionHeader(title: loc.translate('system_section')),
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
                             icon: Icons.security_rounded,
-                            label: 'Permissions',
-                            subtitle: 'Full system access',
+                            label: loc.translate('permissions'),
+                            subtitle: loc.translate('full_system_access'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.history_rounded,
-                            label: 'Activity Log',
-                            subtitle: 'View system changes',
+                            label: loc.translate('activity_log'),
+                            subtitle: loc.translate('view_system_changes'),
                             onTap: () {},
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 4),
-                      const SectionHeader(title: 'App'),
+                      SectionHeader(title: loc.translate('app_section')),
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
                             icon: Icons.language_outlined,
-                            label: AppLocalizations.of(context).language,
-                            subtitle: widget.languageProvider.isVietnamese ? 'Tiếng Việt' : 'English',
+                            label: loc.language,
+                            subtitle: widget.languageProvider.isVietnamese
+                                ? loc.vietnamese
+                                : loc.english,
                             trailing: LanguageSwitcher(
                               isVietnamese: widget.languageProvider.isVietnamese,
                               onToggle: () {
@@ -129,14 +133,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                           ),
                           _SettingsItem(
                             icon: Icons.settings_outlined,
-                            label: 'App Settings',
-                            subtitle: 'Theme, language & display',
+                            label: loc.translate('app_settings'),
+                            subtitle: loc.translate('app_settings_sub'),
                             onTap: () {},
                           ),
                           _SettingsItem(
                             icon: Icons.info_outline_rounded,
-                            label: 'About',
-                            subtitle: 'Version 1.0.0 · Clinical Sentinel',
+                            label: loc.translate('about'),
+                            subtitle: loc.translate('about_server_sub'),
                             onTap: () {},
                           ),
                         ],
@@ -147,8 +151,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                         items: [
                           _SettingsItem(
                             icon: Icons.logout_rounded,
-                            label: 'Logout',
-                            subtitle: 'Sign out of the system',
+                            label: loc.logout,
+                            subtitle: loc.translate('logout_admin_subtitle'),
                             iconColor: AppTheme.errorColor,
                             labelColor: AppTheme.errorColor,
                             showArrow: false,
@@ -173,18 +177,18 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Logout',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          AppLocalizations.of(ctx).logout,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        content: const Text(
-          'Are you sure you want to log out from the admin panel?',
-          style: TextStyle(fontSize: 13, height: 1.5),
+        content: Text(
+          AppLocalizations.of(ctx).translate('admin_logout_message'),
+          style: const TextStyle(fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(AppLocalizations.of(ctx).translate('cancel')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -194,7 +198,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
             ),
-            child: const Text('Logout'),
+            child: Text(AppLocalizations.of(ctx).logout),
           ),
         ],
       ),
@@ -204,12 +208,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
 
 class _ProfileHeader extends StatelessWidget {
   final UserAccount? user;
-  final VoidCallback onSwitchApp;
 
-  const _ProfileHeader({
-    required this.user,
-    required this.onSwitchApp,
-  });
+  const _ProfileHeader({required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -229,58 +229,19 @@ class _ProfileHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Admin Profile',
-                style: TextStyle(
+              Text(
+                AppLocalizations.of(context).translate('admin_profile_header'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.edit_outlined,
-                      color: Colors.white70,
-                      size: 20,
-                    ),
-                    onPressed: () {},
-                  ),
-                  GestureDetector(
-                    onTap: onSwitchApp,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white30),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.swap_horiz_rounded,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'User',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 20),
+                onPressed: user == null
+                    ? null
+                    : () => showEditProfileSheet(context, user: user!),
               ),
             ],
           ),
@@ -320,7 +281,7 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            user?.fullName ?? 'Administrator',
+            user?.fullName ?? AppLocalizations.of(context).translate('administrator_default'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,

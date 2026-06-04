@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/auth_models.dart';
 import '../services/auth_service.dart';
+import '../services/device_session_service.dart';
 
 /// Authentication Provider
 /// Manages authentication state and notifies listeners of changes
@@ -15,13 +16,32 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   bool _isAuthenticated = false;
   String? _pendingVerificationEmail;
+  bool _kickedByOtherDevice = false;
 
   UserAccount? get user => _user;
+  bool get kickedByOtherDevice => _kickedByOtherDevice;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _isAuthenticated;
   String? get pendingVerificationEmail => _pendingVerificationEmail;
   AuthService get authService => _authService;
+
+  void _startDeviceSessionWatch(String uid) {
+    DeviceSessionService.instance.startWatching(
+      uid,
+      onKicked: () async {
+        if (_kickedByOtherDevice) return;
+        _kickedByOtherDevice = true;
+        await logout();
+      },
+    );
+  }
+
+  Future<void> _bindDeviceSessionIfVerified(UserAccount account) async {
+    if (!account.emailVerified) return;
+    await DeviceSessionService.instance.registerActiveSession(account.id);
+    _startDeviceSessionWatch(account.id);
+  }
 
   // ─── Initialize Saved User (Persistent Login) ────────
   /// Check and restore saved user session on app startup
@@ -35,9 +55,11 @@ class AuthProvider extends ChangeNotifier {
       if (savedUser != null) {
         _user = savedUser;
         _isAuthenticated = savedUser.emailVerified;
-        // Nếu đã đăng nhập Firebase nhưng chưa xác thực email, đưa lại vào luồng xác thực.
         _pendingVerificationEmail =
             savedUser.emailVerified ? null : (savedUser.email.isNotEmpty ? savedUser.email : null);
+        if (savedUser.emailVerified) {
+          _startDeviceSessionWatch(savedUser.id);
+        }
         _isLoading = false;
         notifyListeners();
         return true;
@@ -70,6 +92,9 @@ class AuthProvider extends ChangeNotifier {
         _pendingVerificationEmail = verified
             ? null
             : ((response.user?.email ?? '').isNotEmpty ? response.user!.email : null);
+        if (response.user != null && verified) {
+          _startDeviceSessionWatch(response.user!.id);
+        }
         _isLoading = false;
         notifyListeners();
         return true;
@@ -126,6 +151,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
+    DeviceSessionService.instance.stopWatching();
     await _authService.logout();
     _user = null;
     _isAuthenticated = false;
@@ -133,6 +159,10 @@ class AuthProvider extends ChangeNotifier {
     _pendingVerificationEmail = null;
     _isLoading = false;
     notifyListeners();
+  }
+
+  void clearKickedFlag() {
+    _kickedByOtherDevice = false;
   }
 
   // ─── Clear Error ──────────────────────────────────────
@@ -187,10 +217,11 @@ class AuthProvider extends ChangeNotifier {
     try {
       final response = await _authService.verifyEmail(email, code);
 
-      if (response.success) {
+      if (response.success && response.user != null) {
         _user = response.user;
-        _isAuthenticated = true; // Now authenticated after email verification
+        _isAuthenticated = true;
         _pendingVerificationEmail = null;
+        await _bindDeviceSessionIfVerified(response.user!);
         _isLoading = false;
         notifyListeners();
         return true;
@@ -231,6 +262,47 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       }
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> reloadUserProfile() async {
+    final u = await _authService.refreshCurrentUserProfile();
+    if (u != null) {
+      _user = u;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String fullName,
+    String? phone,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _authService.updateProfile(
+        fullName: fullName,
+        phone: phone,
+      );
+
+      if (response.success && response.user != null) {
+        _user = response.user;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      _error = response.error ?? 'Update failed';
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
       _error = e.toString();
       _isLoading = false;

@@ -9,13 +9,11 @@ import 'system_log_screen.dart';
 import 'admin_profile_screen.dart';
 
 class ServerApp extends StatefulWidget {
-  final VoidCallback onSwitchApp;
   final LanguageProvider languageProvider;
   final VoidCallback? onLogout;
 
   const ServerApp({
     super.key,
-    required this.onSwitchApp,
     required this.languageProvider,
     this.onLogout,
   });
@@ -33,15 +31,11 @@ class _ServerAppState extends State<ServerApp> {
   void initState() {
     super.initState();
     _screens = [
-      DashboardScreen(
-        onSwitchApp: widget.onSwitchApp,
-        languageProvider: widget.languageProvider,
-      ),
+      DashboardScreen(languageProvider: widget.languageProvider),
       const CameraConfigScreen(),
       const FamilyScreen(),
       const SystemLogScreen(),
       AdminProfileScreen(
-        onSwitchApp: widget.onSwitchApp,
         languageProvider: widget.languageProvider,
         onLogout: widget.onLogout,
       ),
@@ -107,7 +101,7 @@ class _ServerAppState extends State<ServerApp> {
             NavigationDestination(
               icon: const Icon(Icons.person_outline),
               selectedIcon: const Icon(Icons.person),
-              label: 'Profile',
+              label: AppLocalizations.of(context).navProfile,
             ),
           ],
         ),

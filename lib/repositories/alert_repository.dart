@@ -10,6 +10,7 @@ class AlertRepository {
       'familyId': familyId,
       'cameraId': cameraId,
       'type': 'fall',
+      'message': 'Fall-type alert recorded',
       'status': 'active', // active | resolved
       'createdAt': FieldValue.serverTimestamp(),
     });
