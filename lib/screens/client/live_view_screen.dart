@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../theme/app_theme.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+
+import '../../localization/app_localization.dart';
 import '../../models/models.dart';
+import '../../services/relay/relay_watch_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
+/// Xem live camera qua relay VPS (WebRTC DTLS-SRTP).
+/// Chỉ kết nối khi người dùng mở màn hình này.
 class LiveViewScreen extends StatefulWidget {
   final CameraModel camera;
 
@@ -14,30 +20,100 @@ class LiveViewScreen extends StatefulWidget {
 }
 
 class _LiveViewScreenState extends State<LiveViewScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  final _watchService = RelayWatchService();
+  final _renderer = RTCVideoRenderer();
+
   bool _isMuted = false;
   bool _isTalking = false;
   bool _isRecording = false;
   bool _isFullscreen = false;
   late AnimationController _recordingAnim;
 
+  RelayWatchState _watchState = RelayWatchState.idle;
+  String? _errorCode;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _recordingAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
+    _bootstrapWatch();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (_watchState != RelayWatchState.connected ||
+        _renderer.srcObject == null) {
+      _retryWatch();
+    }
+  }
+
+  Future<void> _bootstrapWatch() async {
+    if (widget.camera.relayCameraId.isEmpty) return;
+
+    await _renderer.initialize();
+    _renderer.srcObject = null;
+
+    _watchService.onStateChanged = (state, error) {
+      if (!mounted) return;
+      setState(() {
+        _watchState = state;
+        _errorCode = error;
+      });
+    };
+
+    await _watchService.watch(
+      relayCameraId: widget.camera.relayCameraId,
+      renderer: _renderer,
+    );
+  }
+
+  Future<void> _retryWatch() async {
+    await _watchService.reconnect(
+      relayCameraId: widget.camera.relayCameraId,
+      renderer: _renderer,
+    );
+  }
+
+  String _errorText(AppLocalizations loc) {
+    final code = _errorCode;
+    if (code == null) return '';
+    switch (code) {
+      case 'relay_not_configured':
+        return loc.translate('relay_not_configured');
+      case 'relay_token_not_configured':
+        return loc.translate('relay_token_not_configured');
+      case 'camera_not_online':
+        return loc.translate('camera_not_online');
+      case 'relay_auth_failed':
+        return loc.translate('relay_auth_failed');
+      default:
+        return code;
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _watchService.dispose();
+    _renderer.dispose();
     _recordingAnim.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final isLive = _watchState == RelayWatchState.connected;
+    final isBusy = _watchState == RelayWatchState.loading ||
+        _watchState == RelayWatchState.reconnecting;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A1A0A),
       appBar: _isFullscreen
@@ -64,15 +140,22 @@ class _LiveViewScreenState extends State<LiveViewScreen>
                       Container(
                         width: 5,
                         height: 5,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppTheme.primaryLight,
+                          color: isLive
+                              ? AppTheme.primaryLight
+                              : AppTheme.errorColor,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Text(
-                        'HD · Live',
-                        style: TextStyle(color: Colors.white60, fontSize: 11),
+                      Text(
+                        isLive
+                            ? '${widget.camera.resolution} · ${loc.translate('camera_live')}'
+                            : loc.translate('relay_watch_loading'),
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -80,19 +163,24 @@ class _LiveViewScreenState extends State<LiveViewScreen>
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-                  onPressed: () {},
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  onPressed: isBusy ? null : _retryWatch,
+                  tooltip: loc.translate('relay_watch_retry'),
                 ),
               ],
             ),
       body: Column(
         children: [
-          // Live stream area
           _LiveStreamArea(
             camera: widget.camera,
             isFullscreen: _isFullscreen,
             isRecording: _isRecording,
             recordingAnim: _recordingAnim,
+            isLive: isLive,
+            isBusy: isBusy,
+            errorText: _errorText(loc),
+            renderer: _renderer,
+            onRetry: _retryWatch,
             onToggleFullscreen: () {
               setState(() => _isFullscreen = !_isFullscreen);
               if (_isFullscreen) {
@@ -102,8 +190,6 @@ class _LiveViewScreenState extends State<LiveViewScreen>
               }
             },
           ),
-
-          // Controls bar
           Container(
             color: const Color(0xFF1A2A1A),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -140,14 +226,24 @@ class _LiveViewScreenState extends State<LiveViewScreen>
                   onTap: () => setState(() => _isRecording = !_isRecording),
                 ),
                 _ControlButton(
-                  icon: Icons.switch_camera_rounded,
-                  label: 'Switch',
-                  onTap: () {},
+                  icon: Icons.fullscreen_rounded,
+                  label: 'Full',
+                  onTap: () {
+                    setState(() => _isFullscreen = !_isFullscreen);
+                    if (_isFullscreen) {
+                      SystemChrome.setEnabledSystemUIMode(
+                        SystemUiMode.immersive,
+                      );
+                    } else {
+                      SystemChrome.setEnabledSystemUIMode(
+                        SystemUiMode.edgeToEdge,
+                      );
+                    }
+                  },
                 ),
               ],
             ),
           ),
-
           if (!_isFullscreen)
             Expanded(
               child: SingleChildScrollView(
@@ -155,7 +251,6 @@ class _LiveViewScreenState extends State<LiveViewScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 2-way audio status
                     if (_isTalking)
                       Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -189,8 +284,6 @@ class _LiveViewScreenState extends State<LiveViewScreen>
                           ],
                         ),
                       ),
-
-                    // Recent activity
                     SectionHeader(
                       title: 'Recent Activity',
                       trailing: TextButton(
@@ -236,6 +329,11 @@ class _LiveStreamArea extends StatelessWidget {
   final bool isFullscreen;
   final bool isRecording;
   final AnimationController recordingAnim;
+  final bool isLive;
+  final bool isBusy;
+  final String errorText;
+  final RTCVideoRenderer renderer;
+  final VoidCallback onRetry;
   final VoidCallback onToggleFullscreen;
 
   const _LiveStreamArea({
@@ -243,71 +341,104 @@ class _LiveStreamArea extends StatelessWidget {
     required this.isFullscreen,
     required this.isRecording,
     required this.recordingAnim,
+    required this.isLive,
+    required this.isBusy,
+    required this.errorText,
+    required this.renderer,
+    required this.onRetry,
     required this.onToggleFullscreen,
   });
 
   @override
   Widget build(BuildContext context) {
-    final aspectRatio = isFullscreen ? 16 / 9 : 4 / 3;
+    final aspectRatio = 16 / 9;
     return AspectRatio(
       aspectRatio: aspectRatio,
       child: Container(
         width: double.infinity,
         color: const Color(0xFF050F05),
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            // Stream placeholder
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.videocam_rounded,
-                    size: 40,
-                    color: AppTheme.primaryLight.withOpacity(0.2),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Loading ${camera.resolution} stream...',
-                    style: TextStyle(
-                      color: AppTheme.primaryLight.withOpacity(0.4),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Top-left: LIVE badge
-            Positioned(
-              top: 10,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.errorColor,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _BlinkingDot(),
-                    SizedBox(width: 4),
-                    Text(
-                      'LIVE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
+            if (isLive)
+              RTCVideoView(
+                renderer,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+              )
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isBusy)
+                        const CircularProgressIndicator(
+                          color: AppTheme.primaryLight,
+                        )
+                      else
+                        Icon(
+                          Icons.videocam_off_outlined,
+                          size: 48,
+                          color: AppTheme.primaryLight.withOpacity(0.35),
+                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        isBusy
+                            ? 'Loading ${camera.resolution} stream...'
+                            : (errorText.isNotEmpty
+                                ? errorText
+                                : 'Camera offline'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppTheme.primaryLight.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                  ],
+                      if (!isBusy) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: onRetry,
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Retry'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryLight,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-            // Top-right: recording indicator
+            if (isLive)
+              Positioned(
+                top: 10,
+                left: 12,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _BlinkingDot(),
+                      SizedBox(width: 4),
+                      Text(
+                        'LIVE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (isRecording)
               Positioned(
                 top: 10,
@@ -345,40 +476,6 @@ class _LiveStreamArea extends StatelessWidget {
                   ),
                 ),
               ),
-
-            // Bottom-left: Alert indicator
-            Positioned(
-              bottom: 10,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.errorColor.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.white,
-                      size: 11,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'ALERT ACTIVE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Bottom-right: timestamp + fullscreen
             Positioned(
               bottom: 10,
               right: 12,

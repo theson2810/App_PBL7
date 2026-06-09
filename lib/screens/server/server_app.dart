@@ -3,7 +3,7 @@ import '../../theme/app_theme.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import 'dashboard_screen.dart';
-import 'camera_config_screen.dart';
+import 'server_camera_hub_screen.dart';
 import 'family_screen.dart';
 import 'system_log_screen.dart';
 import 'admin_profile_screen.dart';
@@ -32,7 +32,7 @@ class _ServerAppState extends State<ServerApp> {
     super.initState();
     _screens = [
       DashboardScreen(languageProvider: widget.languageProvider),
-      const CameraConfigScreen(),
+      const ServerCameraHubScreen(),
       const FamilyScreen(),
       const SystemLogScreen(),
       AdminProfileScreen(

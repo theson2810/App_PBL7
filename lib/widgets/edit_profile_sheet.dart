@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../localization/app_localization.dart';
@@ -37,6 +41,24 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
   final _formKey = GlobalKey<FormState>();
+  XFile? _pickedAvatar;
+  Uint8List? _pickedAvatarBytes;
+  bool _uploadingAvatar = false;
+
+  ImageProvider<Object>? _avatarImage() {
+    if (_pickedAvatarBytes != null) {
+      return MemoryImage(_pickedAvatarBytes!);
+    }
+    final avatar = widget.user.avatar;
+    if (avatar != null && avatar.isNotEmpty) {
+      return NetworkImage(avatar);
+    }
+    return null;
+  }
+
+  bool get _hasAvatarImage =>
+      _pickedAvatarBytes != null ||
+      (widget.user.avatar != null && widget.user.avatar!.isNotEmpty);
 
   @override
   void initState() {
@@ -56,9 +78,30 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     if (!_formKey.currentState!.validate()) return;
 
     final loc = AppLocalizations.of(context);
+    String? avatarUrl;
+    if (_pickedAvatar != null) {
+      setState(() => _uploadingAvatar = true);
+      try {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) throw Exception('No active session');
+        final bytes = await _pickedAvatar!.readAsBytes();
+        final ref = FirebaseStorage.instance
+            .ref('avatars/$uid/${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await ref.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        avatarUrl = await ref.getDownloadURL();
+      } finally {
+        if (mounted) setState(() => _uploadingAvatar = false);
+      }
+    }
+
+    if (!mounted) return;
     final ok = await context.read<AuthProvider>().updateProfile(
           fullName: _nameCtrl.text.trim(),
           phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          avatarUrl: avatarUrl,
         );
 
     if (!mounted) return;
@@ -108,6 +151,64 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
+            Center(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(42),
+                onTap: auth.isLoading || _uploadingAvatar
+                    ? null
+                    : () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 75,
+                          maxWidth: 512,
+                        );
+                        if (image == null || !mounted) return;
+                        final bytes = await image.readAsBytes();
+                        if (!mounted) return;
+                        setState(() {
+                          _pickedAvatar = image;
+                          _pickedAvatarBytes = bytes;
+                        });
+                      },
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 42,
+                      backgroundColor: widget.user.avatarColor,
+                      backgroundImage: _avatarImage(),
+                      child: !_hasAvatarImage
+                          ? Text(
+                              widget.user.initials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.primary,
+                        ),
+                        child: const Icon(
+                          Icons.photo_camera_outlined,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _nameCtrl,
               decoration: InputDecoration(
@@ -137,11 +238,11 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: auth.isLoading ? null : _save,
+              onPressed: auth.isLoading || _uploadingAvatar ? null : _save,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
               ),
-              child: auth.isLoading
+              child: auth.isLoading || _uploadingAvatar
                   ? const SizedBox(
                       width: 22,
                       height: 22,

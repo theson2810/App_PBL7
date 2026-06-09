@@ -253,6 +253,8 @@ class AppLocalizations {
         'monitoring_schedule_sub': '24/7 continuous monitoring',
         'app_settings': 'App Settings',
         'app_settings_sub': 'Theme, language & display',
+        'dark_mode': 'Dark mode',
+        'text_size': 'Text size',
         'privacy_security': 'Privacy & Security',
         'privacy_secure': 'Secure',
         'privacy_sub': '2FA enabled · Data encrypted',
@@ -268,6 +270,8 @@ class AppLocalizations {
 
         // Auth messages
         'login_failed': 'Login failed',
+        'firestore_permission_denied':
+            'Firestore access denied. Deploy firestore.rules in Firebase Console (project pbl7-2a6ad).',
         'register_failed': 'Registration failed',
         'login_verify_email':
             'Signed in. Please verify your email to continue.',
@@ -366,6 +370,7 @@ class AppLocalizations {
         'create_family_btn': 'Create family group',
         'invite_gmail_otp': 'Invite via Gmail + OTP',
         'join_code_6': 'Join code (6 digits)',
+        'join_code': 'Join code',
         'join_code_copied': 'Join code copied',
         'family_id_label': 'Family ID',
         'pending_join_requests': 'Join requests (pending)',
@@ -396,6 +401,7 @@ class AppLocalizations {
         'create_family_before_camera':
             'Create a family before adding cameras.',
         'add_new_camera': 'Add New Camera',
+        'camera_limit_reached': 'Maximum 4 cameras reached',
         'stat_total': 'Total',
         'stat_offline': 'Offline',
         'configured_cameras': 'Configured Cameras',
@@ -411,9 +417,40 @@ class AppLocalizations {
         'camera_add_failed': 'Could not add camera',
         'add_camera_sheet_title': 'Add New Camera',
         'add_camera_sheet_help':
-            'Link a camera record to an edge chip ID (streaming setup is separate).',
+            'Tenda CP6: enter LAN IP — RTSP URLs are auto-filled. Run publisher on chip/laptop, then mark online.',
+        'add_camera_mode_tenda': 'Tenda CP6',
+        'add_camera_mode_manual': 'Manual',
+        'camera_type_label': 'Camera type',
+        'camera_auto_config_hint':
+            'Relay ID, RTSP main stream and AI sub-stream are generated automatically from this IP.',
+        'tenda_ip_label': 'Camera IP (LAN)',
+        'tenda_ip_helper': 'Main: rtsp://IP/tenda · Sub: rtsp://IP/tenda_sub',
+        'tenda_ip_invalid': 'Invalid IPv4 address',
+        'relay_id_tenda_hint': 'Must match CAMERA_ID in python/.env on chip',
         'camera_name_label': 'Camera name',
-        'chip_device_id_label': 'Chip / device ID',
+        'chip_device_id_label': 'Chip / device ID (optional)',
+        'chip_device_id_optional_hint': 'Optional edge device label',
+        'relay_camera_id_label': 'Relay camera ID (VPS)',
+        'relay_camera_id': 'Relay ID',
+        'camera_hub_subtitle': 'Configure cameras & watch live via GCP relay',
+        'camera_tab_config': 'Configure',
+        'camera_tab_watch': 'Watch live',
+        'relay_watch_loading': 'Fetching token & connecting…',
+        'relay_watch_connected': 'Live stream connected',
+        'relay_watch_reconnecting': 'Reconnecting…',
+        'relay_watch_failed': 'Connection failed',
+        'relay_watch_disconnected': 'Disconnected',
+        'relay_watch_idle': 'Ready',
+        'relay_watch_retry': 'Retry',
+        'relay_not_configured':
+            'Relay not configured. In Firebase Console → Firestore, create document app_config/relay with baseUrl and relayToken (see project docs).',
+        'relay_token_not_configured':
+            'Relay token not set. Add app_config/relay.relayToken in Firestore (same as VPS RELAY_TOKEN).',
+        'relay_on_vps': 'Publishing on VPS',
+        'relay_off_vps': 'Not on VPS',
+        'relay_online_hint': 'Green = camera is publishing to relay (GET /cameras)',
+        'camera_not_online': 'Camera is not publishing to relay yet',
+        'relay_auth_failed': 'Invalid relay token — check Firestore relayToken vs VPS RELAY_TOKEN',
 
         // Server — logs
         'operational_logs': 'Operational Logs',
@@ -712,6 +749,8 @@ class AppLocalizations {
         'monitoring_schedule_sub': 'Giám sát 24/7',
         'app_settings': 'Cài đặt ứng dụng',
         'app_settings_sub': 'Giao diện, ngôn ngữ & hiển thị',
+        'dark_mode': 'Chế độ tối',
+        'text_size': 'Cỡ chữ',
         'privacy_security': 'Riêng tư & bảo mật',
         'privacy_secure': 'An toàn',
         'privacy_sub': 'Mã hóa dữ liệu',
@@ -726,6 +765,8 @@ class AppLocalizations {
         'admin_profile_header': 'Hồ sơ Admin',
 
         'login_failed': 'Đăng nhập thất bại',
+        'firestore_permission_denied':
+            'Firestore từ chối quyền truy cập. Cần deploy firestore.rules trên Firebase Console (project pbl7-2a6ad).',
         'register_failed': 'Đăng ký thất bại',
         'login_verify_email':
             'Đăng nhập thành công. Vui lòng xác thực email để tiếp tục.',
@@ -820,6 +861,7 @@ class AppLocalizations {
         'create_family_btn': 'Tạo nhóm gia đình',
         'invite_gmail_otp': 'Mời qua Gmail + OTP',
         'join_code_6': 'Mã tham gia (6 số)',
+        'join_code': 'Mã tham gia',
         'join_code_copied': 'Đã sao chép mã',
         'family_id_label': 'Family ID',
         'pending_join_requests': 'Yêu cầu tham gia (chờ duyệt)',
@@ -849,6 +891,7 @@ class AppLocalizations {
         'create_family_before_camera':
             'Tạo nhóm gia đình trước khi thêm camera.',
         'add_new_camera': 'Thêm camera mới',
+        'camera_limit_reached': 'Tối đa 4 camera',
         'stat_total': 'Tổng',
         'stat_offline': 'Ngoại tuyến',
         'configured_cameras': 'Camera đã cấu hình',
@@ -864,9 +907,40 @@ class AppLocalizations {
         'camera_add_failed': 'Không thêm được camera',
         'add_camera_sheet_title': 'Thêm camera mới',
         'add_camera_sheet_help':
-            'Liên kết bản ghi camera với chip ID (cấu hình stream riêng).',
+            'Tenda CP6: nhập IP LAN — URL RTSP tự điền. Chạy publisher trên chip/laptop, rồi đánh dấu online.',
+        'add_camera_mode_tenda': 'Tenda CP6',
+        'add_camera_mode_manual': 'Thủ công',
+        'camera_type_label': 'Loại camera',
+        'camera_auto_config_hint':
+            'Relay ID, luồng RTSP chính và luồng phụ cho AI sẽ tự sinh từ IP này.',
+        'tenda_ip_label': 'IP camera (LAN)',
+        'tenda_ip_helper': 'Chính: rtsp://IP/tenda · Phụ: rtsp://IP/tenda_sub',
+        'tenda_ip_invalid': 'Địa chỉ IPv4 không hợp lệ',
+        'relay_id_tenda_hint': 'Phải khớp CAMERA_ID trong python/.env trên chip',
         'camera_name_label': 'Tên camera',
-        'chip_device_id_label': 'Chip / device ID',
+        'chip_device_id_label': 'Chip / device ID (tùy chọn)',
+        'chip_device_id_optional_hint': 'Nhãn thiết bị biên (tùy chọn)',
+        'relay_camera_id_label': 'Relay camera ID (VPS)',
+        'relay_camera_id': 'Relay ID',
+        'camera_hub_subtitle': 'Cấu hình camera & xem live qua GCP relay',
+        'camera_tab_config': 'Cấu hình',
+        'camera_tab_watch': 'Xem trực tiếp',
+        'relay_watch_loading': 'Đang lấy token & kết nối…',
+        'relay_watch_connected': 'Đã kết nối luồng trực tiếp',
+        'relay_watch_reconnecting': 'Đang kết nối lại…',
+        'relay_watch_failed': 'Kết nối thất bại',
+        'relay_watch_disconnected': 'Đã ngắt kết nối',
+        'relay_watch_idle': 'Sẵn sàng',
+        'relay_watch_retry': 'Thử lại',
+        'relay_not_configured':
+            'Chưa cấu hình relay. Trên Firebase Console → Firestore, tạo document app_config/relay với baseUrl và relayToken.',
+        'relay_token_not_configured':
+            'Chưa cấu hình relay token. Thêm app_config/relay.relayToken trên Firestore (trùng RELAY_TOKEN trên VPS).',
+        'relay_on_vps': 'Đang publish trên VPS',
+        'relay_off_vps': 'Chưa có trên VPS',
+        'relay_online_hint': 'Xanh = camera đang publish lên relay (GET /cameras)',
+        'camera_not_online': 'Camera chưa publish lên relay',
+        'relay_auth_failed': 'Sai relay token — kiểm tra Firestore relayToken và RELAY_TOKEN trên VPS',
 
         'operational_logs': 'Nhật ký vận hành',
         'system_event_stream': 'Luồng sự kiện hệ thống',

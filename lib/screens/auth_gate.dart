@@ -8,6 +8,7 @@ import 'client/welcome_screen.dart';
 import 'client/email_verification_screen.dart';
 import 'server/server_app.dart';
 import 'client/client_app.dart';
+import '../config/relay_config.dart';
 
 class AuthGate extends StatefulWidget {
   final LanguageProvider languageProvider;
@@ -36,7 +37,11 @@ class _AuthGateState extends State<AuthGate> {
   Future<void> _initializeSavedUser() async {
     final authProvider = context.read<AuthProvider>();
     await authProvider.initializeSavedUser();
-    
+
+    if (authProvider.isAuthenticated) {
+      await RelayConfig.loadFromFirestore();
+    }
+
     if (mounted) {
       setState(() {
         _isInitializing = false;

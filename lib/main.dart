@@ -9,12 +9,14 @@ import 'firebase_options.dart';
 
 // PROVIDERS
 import 'providers/auth_provider.dart';
+import 'providers/app_settings_provider.dart';
 import 'providers/invite_link_provider.dart';
 import 'providers/wifi_join_link_provider.dart';
 
 // SERVICES
 import 'services/deep_link_service.dart';
 import 'services/notification_service.dart';
+import 'config/relay_config.dart';
 
 // UI
 import 'theme/app_theme.dart';
@@ -58,6 +60,10 @@ void main() async {
 
   /// Init background services after app boot (non-blocking UI)
   Future.microtask(() async {
+    // Relay URL chỉ từ Firestore — tải sớm nếu user đã đăng nhập.
+    if (FirebaseAuth.instance.currentUser != null) {
+      await RelayConfig.loadFromFirestore();
+    }
     await NotificationService().initFCM();
   });
 }
@@ -91,6 +97,7 @@ class _ElderlyCareAppState extends State<ElderlyCareApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
         ChangeNotifierProvider(create: (_) => InviteLinkProvider()),
         ChangeNotifierProvider(create: (_) => WifiJoinLinkProvider()),
       ],
@@ -99,6 +106,7 @@ class _ElderlyCareAppState extends State<ElderlyCareApp> {
         child: ListenableBuilder(
           listenable: _languageProvider,
           builder: (context, _) {
+            final appSettings = context.watch<AppSettingsProvider>();
             return MaterialApp(
               title: 'Vital Horizon',
               debugShowCheckedModeBanner: false,
@@ -114,6 +122,17 @@ class _ElderlyCareAppState extends State<ElderlyCareApp> {
                 Locale('vi'),
               ],
               theme: AppTheme.theme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: appSettings.themeMode,
+              builder: (context, child) {
+                final media = MediaQuery.of(context);
+                return MediaQuery(
+                  data: media.copyWith(
+                    textScaler: TextScaler.linear(appSettings.textScale),
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
               home: AuthGate(languageProvider: _languageProvider),
             );
           },

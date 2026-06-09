@@ -5,15 +5,37 @@ class CameraRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ADD CAMERA (gắn vào CHIP)
-  Future<String?> addCamera(String familyId, String chipId, String name) async {
+  Future<String?> addCamera(
+    String familyId,
+    String chipId,
+    String name, {
+    required String relayCameraId,
+    String cameraIp = '',
+    String rtspMainUrl = '',
+    String rtspSubUrl = '',
+  }) async {
     try {
-      final doc = await _db.collection('cameras').add({
+      final existing = await _db
+          .collection('cameras')
+          .where('familyId', isEqualTo: familyId)
+          .get();
+      if (existing.docs.length >= 4) {
+        throw Exception('camera_limit_reached');
+      }
+
+      final payload = <String, dynamic>{
         'familyId': familyId,
         'chipId': chipId,
+        'relayCameraId': relayCameraId,
         'name': name,
         'status': 'offline',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (cameraIp.isNotEmpty) payload['cameraIp'] = cameraIp;
+      if (rtspMainUrl.isNotEmpty) payload['rtspMainUrl'] = rtspMainUrl;
+      if (rtspSubUrl.isNotEmpty) payload['rtspSubUrl'] = rtspSubUrl;
+
+      final doc = await _db.collection('cameras').add(payload);
 
       return doc.id;
     } catch (e) {

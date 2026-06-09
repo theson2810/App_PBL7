@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../localization/app_localization.dart';
 import '../../models/auth_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/auth_error_mapper.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -61,7 +62,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           final loc = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(authProvider.error ?? loc.translate('login_failed')),
+              content: Text(mapAuthError(loc, authProvider.error)),
             ),
           );
         }

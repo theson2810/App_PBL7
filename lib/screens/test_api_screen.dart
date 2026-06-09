@@ -74,7 +74,12 @@ class _TestApiScreenState extends State<TestApiScreen> {
 
     // 5. ADD CAMERA
     String? cameraId =
-        await cameraRepo.addCamera(familyId, chipId!, "Camera 1");
+        await cameraRepo.addCamera(
+      familyId,
+      chipId!,
+      "Camera 1",
+      relayCameraId: 'cam_test_01',
+    );
 
     if (cameraId == null) {
       addLog("Add camera failed");

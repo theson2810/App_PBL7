@@ -6,9 +6,14 @@ import '../../models/camera_model.dart' as fs;
 import '../../widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
 import '../../repositories/camera_repository.dart';
+import '../../utils/tenda_camera_helper.dart';
+import 'admin_camera_live_screen.dart';
 
 class CameraConfigScreen extends StatelessWidget {
-  const CameraConfigScreen({super.key});
+  /// Khi `true`, không render Scaffold/AppBar (dùng trong [ServerCameraHubScreen]).
+  final bool embedded;
+
+  const CameraConfigScreen({super.key, this.embedded = false});
 
   void _showAddCameraSheet(BuildContext context, String familyId) {
     showModalBottomSheet(
@@ -31,13 +36,7 @@ class CameraConfigScreen extends StatelessWidget {
     final familyId = context.watch<AuthProvider>().user?.familyId;
     final cameraRepo = CameraRepository();
 
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      appBar: SubtitleAppBar(
-        title: loc.cameraConfig,
-        subtitle: loc.translate('camera_config_subtitle'),
-      ),
-      body: familyId == null || familyId.isEmpty
+    final body = familyId == null || familyId.isEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -57,9 +56,13 @@ class CameraConfigScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () => _showAddCameraSheet(context, familyId),
+                        onPressed: cameras.length >= 4
+                            ? null
+                            : () => _showAddCameraSheet(context, familyId),
                         icon: const Icon(Icons.add_rounded, size: 20),
-                        label: Text(loc.translate('add_new_camera')),
+                        label: Text(cameras.length >= 4
+                            ? loc.translate('camera_limit_reached')
+                            : loc.translate('add_new_camera')),
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 46),
                         ),
@@ -114,6 +117,15 @@ class CameraConfigScreen extends StatelessWidget {
                         ...cameras.map(
                           (cam) => _CameraConfigCard(
                             camera: cam,
+                            onOpenLive: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      AdminCameraLiveScreen(camera: cam),
+                                ),
+                              );
+                            },
                             onToggleStatus: () async {
                               final next =
                                   cam.status == 'online' ? 'offline' : 'online';
@@ -122,12 +134,22 @@ class CameraConfigScreen extends StatelessWidget {
                             onDelete: () => cameraRepo.deleteCamera(cam.id),
                           ),
                         ),
-                      const SizedBox(height: 80),
+                      SizedBox(height: embedded ? 24 : 80),
                     ],
                   ),
                 );
               },
-            ),
+            );
+
+    if (embedded) return body;
+
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      appBar: SubtitleAppBar(
+        title: loc.cameraConfig,
+        subtitle: loc.translate('camera_config_subtitle'),
+      ),
+      body: body,
     );
   }
 }
@@ -179,11 +201,13 @@ class _MiniStat extends StatelessWidget {
 
 class _CameraConfigCard extends StatelessWidget {
   final fs.CameraModel camera;
+  final VoidCallback onOpenLive;
   final VoidCallback onToggleStatus;
   final VoidCallback onDelete;
 
   const _CameraConfigCard({
     required this.camera,
+    required this.onOpenLive,
     required this.onToggleStatus,
     required this.onDelete,
   });
@@ -193,19 +217,26 @@ class _CameraConfigCard extends StatelessWidget {
     final loc = AppLocalizations.of(context);
     final isLive = camera.status == 'online';
     final isOffline = camera.status == 'offline';
-    final chipLabel = '${loc.translate('chip_prefix')} ${camera.chipId}';
+    final chipLabel = camera.cameraIp.isNotEmpty
+        ? '${loc.translate('tenda_ip_label')}: ${camera.cameraIp}'
+        : (camera.chipId.isNotEmpty
+            ? '${loc.translate('chip_prefix')} ${camera.chipId}'
+            : camera.relayCameraId);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isOffline ? const Color(0xFF1A0A0A) : const Color(0xFF1A2A1A),
-        borderRadius: BorderRadius.circular(14),
-        border: isOffline
-            ? Border.all(color: AppTheme.errorColor.withOpacity(0.4))
-            : Border.all(color: AppTheme.primaryLight.withOpacity(0.15)),
-      ),
-      child: Column(
-        children: [
+    return InkWell(
+      onTap: onOpenLive,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: isOffline ? const Color(0xFF1A0A0A) : const Color(0xFF1A2A1A),
+          borderRadius: BorderRadius.circular(14),
+          border: isOffline
+              ? Border.all(color: AppTheme.errorColor.withOpacity(0.4))
+              : Border.all(color: AppTheme.primaryLight.withOpacity(0.15)),
+        ),
+        child: Column(
+          children: [
           // Preview
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
@@ -334,7 +365,8 @@ class _CameraConfigCard extends StatelessWidget {
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -432,25 +464,80 @@ class _AddCameraSheet extends StatefulWidget {
 }
 
 class _AddCameraSheetState extends State<_AddCameraSheet> {
+  static const _modeTenda = 0;
+
+  int _mode = _modeTenda;
+  String _cameraType = 'tenda_cp6';
   final _nameCtrl = TextEditingController();
   final _chipCtrl = TextEditingController();
+  final _ipCtrl = TextEditingController(text: '192.168.0.102');
+  final _relayIdCtrl = TextEditingController();
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    _syncTendaFields();
+    _ipCtrl.addListener(_syncTendaFields);
+  }
+
+  void _syncTendaFields() {
+    if (_mode != _modeTenda) return;
+    final ip = _ipCtrl.text.trim();
+    if (!TendaCameraHelper.isValidIpv4(ip)) return;
+    _relayIdCtrl.text = TendaCameraHelper.relayIdFromIp(ip);
+    if (_nameCtrl.text.trim().isEmpty ||
+        _nameCtrl.text.startsWith('Tenda CP6')) {
+      _nameCtrl.text = TendaCameraHelper.defaultName(ip);
+    }
+    setState(() {});
+  }
+
+  @override
   void dispose() {
+    _ipCtrl.removeListener(_syncTendaFields);
     _nameCtrl.dispose();
     _chipCtrl.dispose();
+    _ipCtrl.dispose();
+    _relayIdCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     final chipId = _chipCtrl.text.trim();
-    if (name.isEmpty || chipId.isEmpty) return;
+    final relayCameraId = _relayIdCtrl.text.trim();
+    if (name.isEmpty || relayCameraId.isEmpty) return;
+
+    String cameraIp = '';
+    String rtspMain = '';
+    String rtspSub = '';
+    if (_mode == _modeTenda) {
+      cameraIp = _ipCtrl.text.trim();
+      if (!TendaCameraHelper.isValidIpv4(cameraIp)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).translate('tenda_ip_invalid'),
+            ),
+          ),
+        );
+        return;
+      }
+      rtspMain = TendaCameraHelper.mainRtspUrl(cameraIp);
+      rtspSub = TendaCameraHelper.subRtspUrl(cameraIp);
+    }
 
     setState(() => _saving = true);
-    final id = await CameraRepository()
-        .addCamera(widget.familyId, chipId, name);
+    final id = await CameraRepository().addCamera(
+      widget.familyId,
+      chipId.isNotEmpty ? chipId : relayCameraId,
+      name,
+      relayCameraId: relayCameraId,
+      cameraIp: cameraIp,
+      rtspMainUrl: rtspMain,
+      rtspSubUrl: rtspSub,
+    );
     if (!mounted) return;
     setState(() => _saving = false);
     final loc = AppLocalizations.of(context);
@@ -490,26 +577,42 @@ class _AddCameraSheetState extends State<_AddCameraSheet> {
             loc.translate('add_camera_sheet_title'),
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
-          Text(
-            loc.translate('add_camera_sheet_help'),
-            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _cameraType,
+            decoration: InputDecoration(
+              labelText: loc.translate('camera_type_label'),
+              prefixIcon: const Icon(Icons.router_outlined),
+            ),
+            items: [
+              DropdownMenuItem(
+                value: 'tenda_cp6',
+                child: Text(loc.translate('add_camera_mode_tenda')),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _cameraType = value;
+                _mode = _modeTenda;
+              });
+              _syncTendaFields();
+            },
           ),
           const SizedBox(height: 16),
           TextField(
-            controller: _nameCtrl,
+            controller: _ipCtrl,
+            keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              labelText: loc.translate('camera_name_label'),
-              prefixIcon: const Icon(Icons.videocam_outlined),
+              labelText: loc.translate('tenda_ip_label'),
+              hintText: '192.168.0.102',
+              prefixIcon: const Icon(Icons.lan_outlined),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _chipCtrl,
-            decoration: InputDecoration(
-              labelText: loc.translate('chip_device_id_label'),
-              prefixIcon: const Icon(Icons.memory_outlined),
-            ),
+          const SizedBox(height: 10),
+          Text(
+            loc.translate('camera_auto_config_hint'),
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
           const SizedBox(height: 18),
           ElevatedButton.icon(

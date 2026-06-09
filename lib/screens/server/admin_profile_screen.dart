@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../models/auth_models.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/app_settings_sheet.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -65,25 +66,6 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                             onTap: () {},
                           ),
                           _SettingsItem(
-                            icon: Icons.family_restroom_rounded,
-                            label: loc.translate('family_code_label'),
-                            subtitle: user?.familyCode ??
-                                loc.translate('family_code_not_assigned'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.copy_rounded, size: 18),
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '${loc.translate('copied_label')}: ${user?.familyCode}',
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            onTap: () {},
-                          ),
-                          _SettingsItem(
                             icon: Icons.phone_outlined,
                             label: loc.translate('contact_label'),
                             subtitle: user?.phone ?? loc.translate('not_set'),
@@ -118,24 +100,13 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                       _SettingsGroup(
                         items: [
                           _SettingsItem(
-                            icon: Icons.language_outlined,
-                            label: loc.language,
-                            subtitle: widget.languageProvider.isVietnamese
-                                ? loc.vietnamese
-                                : loc.english,
-                            trailing: LanguageSwitcher(
-                              isVietnamese: widget.languageProvider.isVietnamese,
-                              onToggle: () {
-                                widget.languageProvider.toggleLanguage();
-                              },
-                            ),
-                            onTap: () {},
-                          ),
-                          _SettingsItem(
                             icon: Icons.settings_outlined,
                             label: loc.translate('app_settings'),
                             subtitle: loc.translate('app_settings_sub'),
-                            onTap: () {},
+                            onTap: () => showAppSettingsSheet(
+                              context,
+                              languageProvider: widget.languageProvider,
+                            ),
                           ),
                           _SettingsItem(
                             icon: Icons.info_outline_rounded,
@@ -251,14 +222,19 @@ class _ProfileHeader extends StatelessWidget {
               CircleAvatar(
                 radius: 36,
                 backgroundColor: user?.avatarColor ?? Colors.white.withOpacity(0.15),
-                child: Text(
-                  user?.initials ?? 'AD',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                backgroundImage: user?.avatar?.isNotEmpty == true
+                    ? NetworkImage(user!.avatar!)
+                    : null,
+                child: user?.avatar?.isNotEmpty == true
+                    ? null
+                    : Text(
+                        user?.initials ?? 'AD',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
               ),
               Positioned(
                 bottom: 0,

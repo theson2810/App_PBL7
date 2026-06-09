@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function myFamilyId() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId
+        : null;
+    }
+
+    function sameFamily(familyId) {
+      return isSignedIn() && myFamilyId() != null && myFamilyId() == familyId;
+    }
+
+    function isFamilyAdmin(familyId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/families/$(familyId))
+        && (
+          get(/databases/$(database)/documents/families/$(familyId)).data.adminUid == request.auth.uid
+          || get(/databases/$(database)/documents/families/$(familyId)).data.ownerId == request.auth.uid
+        );
+    }
+
+    // Đăng nhập / hồ sơ — BẮT BUỘC cho Sign In
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        || (
+          request.resource.data.familyId is string
+          && isFamilyAdmin(request.resource.data.familyId)
+          && request.resource.data.keys().hasOnly(['familyId', 'familyCode'])
+        );
+      allow update: if isOwner(userId)
+        || (
+          request.resource.data.familyId is string
+          && isFamilyAdmin(request.resource.data.familyId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['familyId', 'familyCode'])
+        );
+      allow delete: if isOwner(userId);
+    }
+
+    // Relay VPS URL + token (đọc sau khi đăng nhập)
+    match /app_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /cameras/{cameraId} {
+      allow read: if sameFamily(resource.data.familyId);
+      allow create: if isSignedIn()
+        && request.resource.data.familyId == myFamilyId();
+      allow update, delete: if sameFamily(resource.data.familyId);
+    }
+
+    match /alerts/{alertId} {
+      allow read: if sameFamily(resource.data.familyId);
+      allow create: if isSignedIn()
+        && request.resource.data.familyId == myFamilyId();
+      allow update: if sameFamily(resource.data.familyId);
+    }
+
+    match /families/{familyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (
+          resource.data.adminUid == request.auth.uid
+          || resource.data.ownerId == request.auth.uid
+        );
+    }
+
+    match /family_members/{memberId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /invites/{familyId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /family_join_requests/{requestId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /family_email_invites/{inviteId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /family_wifi_join_sessions/{sessionId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /chips/{chipId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /sessions/{sessionId} {
+      allow read, write: if isSignedIn();
+      match /signals/{signalId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /webrtc_signals/{signalId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

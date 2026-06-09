@@ -215,7 +215,6 @@ class _ClientFamilyScreenState extends State<ClientFamilyScreen> {
     final loc = AppLocalizations.of(context);
     final user = context.watch<AuthProvider>().user;
     final familyId = user?.familyId;
-    final familyCode = user?.familyCode;
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -329,32 +328,8 @@ class _ClientFamilyScreenState extends State<ClientFamilyScreen> {
                               fontSize: 13,
                             ),
                           ),
-                          Text(
-                            'ID: $familyId',
-                            style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                          ),
-                          if (familyCode != null)
-                            Text(
-                              '${loc.translate('family_code')}: $familyCode',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 18),
-                      onPressed: () async {
-                        final text = '$familyId ${familyCode ?? ''}'.trim();
-                        await Clipboard.setData(ClipboardData(text: text));
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(loc.translate('copied'))),
-                        );
-                      },
                     ),
                   ],
                 ),

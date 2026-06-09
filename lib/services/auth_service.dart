@@ -434,6 +434,7 @@ class AuthService {
   Future<AuthResponse> updateProfile({
     required String fullName,
     String? phone,
+    String? avatarUrl,
   }) async {
     final trimmedName = fullName.trim();
     if (trimmedName.isEmpty) {
@@ -449,6 +450,7 @@ class AuthService {
       await FirebaseFirestore.instance.collection('users').doc(fb.uid).set({
         'fullName': trimmedName,
         if (phone != null) 'phone': phone.trim().isEmpty ? null : phone.trim(),
+        if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatar': avatarUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

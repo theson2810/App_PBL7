@@ -11,6 +11,8 @@ class CameraModel {
   final String resolution;
   final bool aiEnabled;
   final double cpuLoad;
+  /// ID trên relay VPS — dùng khi xem live qua WebRTC.
+  final String relayCameraId;
 
   const CameraModel({
     required this.id,
@@ -20,6 +22,7 @@ class CameraModel {
     this.resolution = '1080p',
     this.aiEnabled = true,
     this.cpuLoad = 0.0,
+    this.relayCameraId = '',
   });
 }
 

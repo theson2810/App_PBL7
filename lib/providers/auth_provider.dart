@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/auth_models.dart';
+import '../config/relay_config.dart';
 import '../services/auth_service.dart';
 import '../services/device_session_service.dart';
 
@@ -59,6 +60,7 @@ class AuthProvider extends ChangeNotifier {
             savedUser.emailVerified ? null : (savedUser.email.isNotEmpty ? savedUser.email : null);
         if (savedUser.emailVerified) {
           _startDeviceSessionWatch(savedUser.id);
+          await RelayConfig.loadFromFirestore();
         }
         _isLoading = false;
         notifyListeners();
@@ -94,6 +96,7 @@ class AuthProvider extends ChangeNotifier {
             : ((response.user?.email ?? '').isNotEmpty ? response.user!.email : null);
         if (response.user != null && verified) {
           _startDeviceSessionWatch(response.user!.id);
+          await RelayConfig.loadFromFirestore();
         }
         _isLoading = false;
         notifyListeners();
@@ -281,6 +284,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> updateProfile({
     required String fullName,
     String? phone,
+    String? avatarUrl,
   }) async {
     _isLoading = true;
     _error = null;
@@ -290,6 +294,7 @@ class AuthProvider extends ChangeNotifier {
       final response = await _authService.updateProfile(
         fullName: fullName,
         phone: phone,
+        avatarUrl: avatarUrl,
       );
 
       if (response.success && response.user != null) {

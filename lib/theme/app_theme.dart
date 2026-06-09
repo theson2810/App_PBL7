@@ -177,6 +177,61 @@ class AppTheme {
           ),
         ),
       );
+
+  static ThemeData get darkTheme => ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: primaryLight,
+          brightness: Brightness.dark,
+          primary: primaryLight,
+          surface: const Color(0xFF101510),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF101510),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF163F18),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF182018),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          margin: const EdgeInsets.only(bottom: 10),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryLight,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF182018),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: primaryLight, width: 1.5),
+          ),
+        ),
+      );
 }
 
 // Color extension helpers

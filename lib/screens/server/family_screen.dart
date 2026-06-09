@@ -23,6 +23,7 @@ class FamilyScreen extends StatefulWidget {
 class _FamilyScreenState extends State<FamilyScreen> {
   final _familyRepo = FamilyRepository();
   final _searchController = TextEditingController();
+  bool _showJoinCode = false;
 
   @override
   void dispose() {
@@ -251,30 +252,44 @@ class _FamilyScreenState extends State<FamilyScreen> {
               if (joinCode != null)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(loc.translate('join_code_6')),
+                  title: Text(loc.translate('join_code')),
                   subtitle: Text(
-                    joinCode,
+                    _showJoinCode ? joinCode : '••••••',
                     style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.copy),
-                    onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: joinCode));
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(loc.translate('join_code_copied'))),
-                      );
-                    },
+                  trailing: Wrap(
+                    spacing: 4,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          _showJoinCode
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () {
+                          setState(() => _showJoinCode = !_showJoinCode);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        onPressed: _showJoinCode
+                            ? () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: joinCode),
+                                );
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        Text(loc.translate('join_code_copied')),
+                                  ),
+                                );
+                              }
+                            : null,
+                      ),
+                    ],
                   ),
                 ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(loc.translate('family_id_label')),
-                subtitle: SelectableText(
-                  familyId,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
               const SizedBox(height: 8),
               SectionHeader(title: loc.translate('pending_join_requests')),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

@@ -39,6 +39,7 @@ class FamilyService {
   Future<void> _ensureSingleFamilyMembership(
     String uid, {
     String? exceptFamilyId,
+    bool checkUserProfile = true,
   }) async {
     final memberships = await _firestore
         .collection('family_members')
@@ -52,6 +53,8 @@ class FamilyService {
       if (exceptFamilyId != null && fid == exceptFamilyId) continue;
       throw Exception('already_in_other_family');
     }
+
+    if (!checkUserProfile) return;
 
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final userFamilyId = userDoc.data()?['familyId'] as String?;
@@ -268,7 +271,11 @@ class FamilyService {
 
     final joinCode = fam.data()?['joinCode'] as String? ?? '';
 
-    await _ensureSingleFamilyMembership(requesterUid, exceptFamilyId: familyId);
+    await _ensureSingleFamilyMembership(
+      requesterUid,
+      exceptFamilyId: familyId,
+      checkUserProfile: false,
+    );
 
     final memberRef = _firestore.collection('family_members').doc();
     final userRef = _firestore.collection('users').doc(requesterUid);

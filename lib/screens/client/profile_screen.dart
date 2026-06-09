@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/app_settings_sheet.dart';
 import '../../widgets/edit_profile_sheet.dart';
 import '../../localization/app_localization.dart';
 import '../../localization/language_provider.dart';
@@ -94,13 +95,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             trailing: StatusBadge.green(loc.translate('monitoring_on')),
                             onTap: () {},
                           ),
-                          _SettingsItem(
-                            icon: Icons.family_restroom_outlined,
-                            label: loc.translate('family_code_label'),
-                            subtitle: user?.familyCode ??
-                                loc.translate('family_code_not_assigned'),
-                            onTap: () {},
-                          ),
                         ],
                       ),
 
@@ -124,7 +118,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.settings_outlined,
                             label: loc.translate('app_settings'),
                             subtitle: loc.translate('app_settings_sub'),
-                            onTap: () {},
+                            onTap: () => showAppSettingsSheet(
+                              context,
+                              languageProvider: widget.languageProvider,
+                            ),
                           ),
                           _SettingsItem(
                             icon: Icons.security_rounded,
@@ -254,15 +251,21 @@ class _ProfileHeader extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 36,
-                backgroundColor: Colors.white.withOpacity(0.15),
-                child: const Text(
-                  'EV',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                backgroundColor:
+                    user?.avatarColor ?? Colors.white.withOpacity(0.15),
+                backgroundImage: user?.avatar?.isNotEmpty == true
+                    ? NetworkImage(user!.avatar!)
+                    : null,
+                child: user?.avatar?.isNotEmpty == true
+                    ? null
+                    : Text(
+                        user?.initials ?? 'MB',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
               ),
               Positioned(
                 bottom: 0,
