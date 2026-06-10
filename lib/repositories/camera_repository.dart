@@ -13,6 +13,7 @@ class CameraRepository {
     String cameraIp = '',
     String rtspMainUrl = '',
     String rtspSubUrl = '',
+    String cameraType = 'tenda_cp6',
   }) async {
     try {
       final existing = await _db
@@ -27,6 +28,7 @@ class CameraRepository {
         'familyId': familyId,
         'chipId': chipId,
         'relayCameraId': relayCameraId,
+        'cameraType': cameraType,
         'name': name,
         'status': 'offline',
         'createdAt': FieldValue.serverTimestamp(),

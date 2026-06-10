@@ -59,11 +59,14 @@ class HomeScreen extends StatelessWidget {
           ? _NoFamilyBody(
               userName: user?.fullName,
               message: AppLocalizations.of(context).translate('join_family_hint'),
+              onRefresh: () async {
+                await context.read<AuthProvider>().refreshUserProfile();
+              },
             )
           : RefreshIndicator(
               color: AppTheme.primary,
               onRefresh: () async {
-                await context.read<AuthProvider>().authService.refreshCurrentUserProfile();
+                await context.read<AuthProvider>().refreshUserProfile();
               },
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -245,8 +248,13 @@ class HomeScreen extends StatelessWidget {
 class _NoFamilyBody extends StatelessWidget {
   final String? userName;
   final String message;
+  final Future<void> Function() onRefresh;
 
-  const _NoFamilyBody({this.userName, required this.message});
+  const _NoFamilyBody({
+    this.userName,
+    required this.message,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -267,6 +275,15 @@ class _NoFamilyBody extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Refresh'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(180, 42),
+              ),
             ),
           ],
         ),

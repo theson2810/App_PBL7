@@ -112,6 +112,54 @@ class FamilyService {
     return '${DateTime.now().millisecondsSinceEpoch % 1000000}'.padLeft(6, '0');
   }
 
+  bool _isExpired(dynamic value) {
+    if (value == null) return true;
+    return DateTime.now().isAfter(_asDateTime(value));
+  }
+
+  /// Admin creates/refreshes a short-lived join code.
+  Future<Map<String, dynamic>> createJoinCode(String familyId) async {
+    final admin = _auth.currentUser;
+    if (admin == null) throw Exception('not_signed_in');
+
+    final famRef = _firestore.collection('families').doc(familyId);
+    final fam = await famRef.get();
+    if (!fam.exists) throw Exception('invalid_code');
+
+    final adminUid = fam.data()?['adminUid'] ?? fam.data()?['ownerId'];
+    if (adminUid != admin.uid) throw Exception('not_admin');
+
+    final code = await _uniqueJoinCode();
+    final expiresAt = DateTime.now().add(const Duration(hours: 1));
+
+    await _firestore.runTransaction((tx) async {
+      tx.set(
+        famRef,
+        {
+          'joinCode': code,
+          'joinCodeExpiresAt': Timestamp.fromDate(expiresAt),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      tx.set(
+        _firestore.collection('invites').doc(familyId),
+        {
+          'familyId': familyId,
+          'code': code,
+          'expiresAt': Timestamp.fromDate(expiresAt),
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    });
+
+    return {
+      'code': code,
+      'expiresAt': expiresAt,
+    };
+  }
+
   /// CREATE FAMILY — current user becomes the only admin.
   Future<String?> createFamily(String name) async {
     try {
@@ -122,13 +170,10 @@ class FamilyService {
         throw Exception('already_admin');
       }
 
-      final joinCode = await _uniqueJoinCode();
-
       final familyRef = await _firestore.collection('families').add({
         'name': name,
         'adminUid': user.uid,
         'ownerId': user.uid,
-        'joinCode': joinCode,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -144,15 +189,9 @@ class FamilyService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      await _firestore.collection('invites').doc(familyId).set({
-        'familyId': familyId,
-        'code': joinCode,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
       await _firestore.collection('users').doc(user.uid).set({
         'familyId': familyId,
-        'familyCode': joinCode,
+        'familyCode': FieldValue.delete(),
       }, SetOptions(merge: true));
 
       return familyId;
@@ -167,15 +206,21 @@ class FamilyService {
     final code = raw.trim();
     if (code.isEmpty) return null;
 
-    final famDoc = await _firestore.collection('families').doc(code).get();
-    if (famDoc.exists) return famDoc.id;
-
     final byJoin = await _firestore
         .collection('families')
         .where('joinCode', isEqualTo: code)
         .limit(1)
         .get();
-    if (byJoin.docs.isNotEmpty) return byJoin.docs.first.id;
+    if (byJoin.docs.isNotEmpty) {
+      final doc = byJoin.docs.first;
+      if (!_isExpired(doc.data()['joinCodeExpiresAt'])) return doc.id;
+      await doc.reference.update({
+        'joinCode': FieldValue.delete(),
+        'joinCodeExpiresAt': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
 
     final legacy = await _firestore
         .collection('invites')
@@ -183,6 +228,8 @@ class FamilyService {
         .limit(1)
         .get();
     if (legacy.docs.isNotEmpty) {
+      final data = legacy.docs.first.data();
+      if (_isExpired(data['expiresAt'])) return null;
       return legacy.docs.first.data()['familyId'] as String?;
     }
     return null;
@@ -200,6 +247,14 @@ class FamilyService {
 
     final fam = await _firestore.collection('families').doc(familyId).get();
     if (!fam.exists) throw Exception('invalid_code');
+    if (_isExpired(fam.data()?['joinCodeExpiresAt'])) {
+      await fam.reference.update({
+        'joinCode': FieldValue.delete(),
+        'joinCodeExpiresAt': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      throw Exception('expired');
+    }
 
     final existing = await _firestore
         .collection('family_members')
@@ -269,8 +324,6 @@ class FamilyService {
     final adminUid = fam.data()?['adminUid'] ?? fam.data()?['ownerId'];
     if (adminUid != admin.uid) throw Exception('not_admin');
 
-    final joinCode = fam.data()?['joinCode'] as String? ?? '';
-
     await _ensureSingleFamilyMembership(
       requesterUid,
       exceptFamilyId: familyId,
@@ -300,7 +353,7 @@ class FamilyService {
         userRef,
         {
           'familyId': familyId,
-          'familyCode': joinCode,
+          'familyCode': FieldValue.delete(),
         },
         SetOptions(merge: true),
       );
@@ -578,8 +631,6 @@ class FamilyService {
 
     final fam = await _firestore.collection('families').doc(familyId).get();
     if (!fam.exists) throw Exception('invalid_session');
-    final joinCode = fam.data()?['joinCode'] as String? ?? '';
-
     final memberRef = _firestore.collection('family_members').doc();
     final userRef = _firestore.collection('users').doc(user.uid);
 
@@ -619,7 +670,7 @@ class FamilyService {
         userRef,
         {
           'familyId': familyId,
-          'familyCode': joinCode,
+          'familyCode': FieldValue.delete(),
         },
         SetOptions(merge: true),
       );
@@ -674,7 +725,11 @@ class FamilyService {
     try {
       final fam = await _firestore.collection('families').doc(familyId).get();
       final jc = fam.data()?['joinCode'] as String?;
-      if (jc != null && jc.isNotEmpty) return jc;
+      if (jc != null &&
+          jc.isNotEmpty &&
+          !_isExpired(fam.data()?['joinCodeExpiresAt'])) {
+        return jc;
+      }
 
       final query = await _firestore
           .collection('invites')
@@ -683,6 +738,7 @@ class FamilyService {
           .get();
 
       if (query.docs.isEmpty) return null;
+      if (_isExpired(query.docs.first.data()['expiresAt'])) return null;
       return query.docs.first.data()['code'] as String?;
     } catch (e) {
       // ignore: avoid_print

@@ -29,6 +29,12 @@ service cloud.firestore {
         );
     }
 
+    function isChipOwner(chipId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/chips/$(chipId))
+        && get(/databases/$(database)/documents/chips/$(chipId)).data.chipAuthUid == request.auth.uid;
+    }
+
     // Đăng nhập / hồ sơ — BẮT BUỘC cho Sign In
     match /users/{userId} {
       allow read: if isOwner(userId);
@@ -40,10 +46,18 @@ service cloud.firestore {
         );
       allow update: if isOwner(userId)
         || (
-          request.resource.data.familyId is string
-          && isFamilyAdmin(request.resource.data.familyId)
-          && request.resource.data.diff(resource.data).affectedKeys()
+          request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['familyId', 'familyCode'])
+          && (
+            (
+              request.resource.data.familyId is string
+              && isFamilyAdmin(request.resource.data.familyId)
+            )
+            || (
+              resource.data.familyId is string
+              && isFamilyAdmin(resource.data.familyId)
+            )
+          )
         );
       allow delete: if isOwner(userId);
     }
@@ -55,10 +69,28 @@ service cloud.firestore {
     }
 
     match /cameras/{cameraId} {
-      allow read: if sameFamily(resource.data.familyId);
+      allow read: if sameFamily(resource.data.familyId)
+        || (
+          resource.data.chipId is string
+          && isChipOwner(resource.data.chipId)
+        );
       allow create: if isSignedIn()
-        && request.resource.data.familyId == myFamilyId();
-      allow update, delete: if sameFamily(resource.data.familyId);
+        && request.resource.data.familyId == myFamilyId()
+        && isFamilyAdmin(request.resource.data.familyId)
+        && request.resource.data.chipId is string
+        && get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.boundChipId == request.resource.data.chipId;
+      allow update: if (
+          sameFamily(resource.data.familyId)
+          && isFamilyAdmin(resource.data.familyId)
+        )
+        || (
+          resource.data.chipId is string
+          && isChipOwner(resource.data.chipId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'runtimeChipId', 'runtimeRelayCameraId', 'lastRuntimeAt'])
+        );
+      allow delete: if sameFamily(resource.data.familyId)
+        && isFamilyAdmin(resource.data.familyId);
     }
 
     match /alerts/{alertId} {
@@ -101,7 +133,30 @@ service cloud.firestore {
     }
 
     match /chips/{chipId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.chipId == chipId
+        && request.resource.data.chipAuthUid == request.auth.uid
+        && request.resource.data.keys()
+          .hasOnly(['chipId', 'chipAuthUid', 'status', 'lastSeenAt']);
+      allow update: if (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['chipId', 'chipAuthUid', 'status', 'lastSeenAt'])
+          && resource.data.chipAuthUid == request.auth.uid
+          && request.resource.data.chipAuthUid == request.auth.uid
+          && request.resource.data.chipId == chipId
+        )
+        || (
+          (
+            request.resource.data.familyId is string
+            && isFamilyAdmin(request.resource.data.familyId)
+          )
+          || (
+            resource.data.familyId is string
+            && isFamilyAdmin(resource.data.familyId)
+          )
+        );
+      allow delete: if false;
     }
 
     match /sessions/{sessionId} {

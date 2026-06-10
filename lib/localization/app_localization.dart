@@ -271,7 +271,7 @@ class AppLocalizations {
         // Auth messages
         'login_failed': 'Login failed',
         'firestore_permission_denied':
-            'Firestore access denied. Deploy firestore.rules in Firebase Console (project pbl7-2a6ad).',
+            'Firestore access denied. Deploy firestore.rules in Firebase Console (project app-pbl7).',
         'register_failed': 'Registration failed',
         'login_verify_email':
             'Signed in. Please verify your email to continue.',
@@ -371,6 +371,12 @@ class AppLocalizations {
         'invite_gmail_otp': 'Invite via Gmail + OTP',
         'join_code_6': 'Join code (6 digits)',
         'join_code': 'Join code',
+        'join_code_created': 'Join code created for 1 hour',
+        'join_code_ttl_hint':
+            'Create a new code only when someone needs to join. It expires after 1 hour.',
+        'create_join_code_1h': 'Create 1-hour join code',
+        'create_new_join_code': 'Create new code',
+        'expires_at': 'Expires',
         'join_code_copied': 'Join code copied',
         'family_id_label': 'Family ID',
         'pending_join_requests': 'Join requests (pending)',
@@ -423,10 +429,23 @@ class AppLocalizations {
         'camera_type_label': 'Camera type',
         'camera_auto_config_hint':
             'Relay ID, RTSP main stream and AI sub-stream are generated automatically from this IP.',
+        'family_chip': 'Family chip',
+        'no_chip_bound': 'No chip connected',
+        'bind_chip': 'Bind chip',
+        'change_chip': 'Change',
+        'bind_chip_first': 'Bind a chip before adding cameras',
+        'bind_chip_help':
+            'Enter the CHIP_ID configured in python/.env on the physical chip. Each family can connect to one chip only.',
+        'chip_id_label': 'Chip ID',
+        'chip_id_required': 'Chip ID is required',
+        'chip_bound': 'Chip connected to family',
+        'family_already_has_chip': 'This family already has a chip',
+        'chip_already_bound': 'This chip is already connected to another family',
         'tenda_ip_label': 'Camera IP (LAN)',
         'tenda_ip_helper': 'Main: rtsp://IP/tenda · Sub: rtsp://IP/tenda_sub',
         'tenda_ip_invalid': 'Invalid IPv4 address',
-        'relay_id_tenda_hint': 'Must match CAMERA_ID in python/.env on chip',
+        'relay_id_tenda_hint':
+            'Generated automatically and synced to the chip via Firebase',
         'camera_name_label': 'Camera name',
         'chip_device_id_label': 'Chip / device ID (optional)',
         'chip_device_id_optional_hint': 'Optional edge device label',
@@ -766,7 +785,7 @@ class AppLocalizations {
 
         'login_failed': 'Đăng nhập thất bại',
         'firestore_permission_denied':
-            'Firestore từ chối quyền truy cập. Cần deploy firestore.rules trên Firebase Console (project pbl7-2a6ad).',
+            'Firestore từ chối quyền truy cập. Cần deploy firestore.rules trên Firebase Console (project app-pbl7).',
         'register_failed': 'Đăng ký thất bại',
         'login_verify_email':
             'Đăng nhập thành công. Vui lòng xác thực email để tiếp tục.',
@@ -862,6 +881,12 @@ class AppLocalizations {
         'invite_gmail_otp': 'Mời qua Gmail + OTP',
         'join_code_6': 'Mã tham gia (6 số)',
         'join_code': 'Mã tham gia',
+        'join_code_created': 'Đã tạo mã tham gia trong 1 giờ',
+        'join_code_ttl_hint':
+            'Chỉ tạo mã mới khi cần mời thành viên nhập mã. Mã hết hạn sau 1 giờ.',
+        'create_join_code_1h': 'Tạo mã tham gia 1 giờ',
+        'create_new_join_code': 'Tạo mã mới',
+        'expires_at': 'Hết hạn',
         'join_code_copied': 'Đã sao chép mã',
         'family_id_label': 'Family ID',
         'pending_join_requests': 'Yêu cầu tham gia (chờ duyệt)',
@@ -913,10 +938,23 @@ class AppLocalizations {
         'camera_type_label': 'Loại camera',
         'camera_auto_config_hint':
             'Relay ID, luồng RTSP chính và luồng phụ cho AI sẽ tự sinh từ IP này.',
+        'family_chip': 'Chip gia đình',
+        'no_chip_bound': 'Chưa kết nối chip',
+        'bind_chip': 'Gán chip',
+        'change_chip': 'Đổi',
+        'bind_chip_first': 'Gán chip trước khi thêm camera',
+        'bind_chip_help':
+            'Nhập CHIP_ID đã cấu hình trong python/.env trên chip thật. Mỗi gia đình chỉ kết nối duy nhất một chip.',
+        'chip_id_label': 'Mã chip',
+        'chip_id_required': 'Cần nhập mã chip',
+        'chip_bound': 'Đã kết nối chip với gia đình',
+        'family_already_has_chip': 'Gia đình này đã có chip',
+        'chip_already_bound': 'Chip này đã được gán cho gia đình khác',
         'tenda_ip_label': 'IP camera (LAN)',
         'tenda_ip_helper': 'Chính: rtsp://IP/tenda · Phụ: rtsp://IP/tenda_sub',
         'tenda_ip_invalid': 'Địa chỉ IPv4 không hợp lệ',
-        'relay_id_tenda_hint': 'Phải khớp CAMERA_ID trong python/.env trên chip',
+        'relay_id_tenda_hint':
+            'Tự sinh và đồng bộ tới chip qua Firebase',
         'camera_name_label': 'Tên camera',
         'chip_device_id_label': 'Chip / device ID (tùy chọn)',
         'chip_device_id_optional_hint': 'Nhãn thiết bị biên (tùy chọn)',

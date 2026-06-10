@@ -53,6 +53,9 @@ class FamilyRepository {
   Future<Map<String, dynamic>> createWifiJoinSession(String familyId) =>
       _familyService.createWifiJoinSession(familyId);
 
+  Future<Map<String, dynamic>> createJoinCode(String familyId) =>
+      _familyService.createJoinCode(familyId);
+
   Future<String> joinFamilyViaWifiSession(String sessionId) =>
       _familyService.joinFamilyViaWifiSession(sessionId);
 

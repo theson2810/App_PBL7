@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +24,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
   final _familyRepo = FamilyRepository();
   final _searchController = TextEditingController();
   bool _showJoinCode = false;
+  bool _creatingJoinCode = false;
+  String? _activeJoinCode;
+  DateTime? _activeJoinCodeExpiresAt;
 
   @override
   void dispose() {
@@ -77,6 +80,30 @@ class _FamilyScreenState extends State<FamilyScreen> {
         backgroundColor: Colors.green,
       ),
     );
+  }
+
+  Future<void> _createJoinCode(String familyId) async {
+    final loc = AppLocalizations.of(context);
+    setState(() => _creatingJoinCode = true);
+    try {
+      final result = await _familyRepo.createJoinCode(familyId);
+      if (!mounted) return;
+      setState(() {
+        _activeJoinCode = result['code'] as String?;
+        _activeJoinCodeExpiresAt = result['expiresAt'] as DateTime?;
+        _showJoinCode = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(loc.translate('join_code_created'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${loc.translate('error_prefix')}: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingJoinCode = false);
+    }
   }
 
   Future<void> _confirmRemoveMember(
@@ -178,7 +205,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
     final loc = AppLocalizations.of(context);
     final user = context.watch<AuthProvider>().user;
     final familyId = user?.familyId;
-    final joinCode = user?.familyCode;
+    final joinCode = _activeJoinCode;
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -249,47 +276,102 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              if (joinCode != null)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(loc.translate('join_code')),
-                  subtitle: Text(
-                    _showJoinCode ? joinCode : '••••••',
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
                   ),
-                  trailing: Wrap(
-                    spacing: 4,
+                  child: Column(
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          _showJoinCode
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(loc.translate('join_code')),
+                        subtitle: Text(
+                          joinCode == null
+                              ? loc.translate('join_code_ttl_hint')
+                              : (_showJoinCode ? joinCode : '******'),
+                          style: TextStyle(
+                            fontFamily: joinCode == null ? null : 'monospace',
+                            fontSize: joinCode == null ? 12 : 16,
+                            color: joinCode == null
+                                ? AppTheme.textSecondary
+                                : AppTheme.textPrimary,
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() => _showJoinCode = !_showJoinCode);
-                        },
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            if (joinCode != null)
+                              IconButton(
+                                icon: Icon(
+                                  _showJoinCode
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                                onPressed: () {
+                                  setState(() => _showJoinCode = !_showJoinCode);
+                                },
+                              ),
+                            if (joinCode != null)
+                              IconButton(
+                                icon: const Icon(Icons.copy),
+                                onPressed: _showJoinCode
+                                    ? () async {
+                                        await Clipboard.setData(
+                                          ClipboardData(text: joinCode),
+                                        );
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              loc.translate('join_code_copied'),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                              ),
+                          ],
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.copy),
-                        onPressed: _showJoinCode
-                            ? () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: joinCode),
-                                );
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content:
-                                        Text(loc.translate('join_code_copied')),
-                                  ),
-                                );
-                              }
-                            : null,
+                      if (_activeJoinCodeExpiresAt != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${loc.translate('expires_at')}: ${_activeJoinCodeExpiresAt!.hour.toString().padLeft(2, '0')}:${_activeJoinCodeExpiresAt!.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _creatingJoinCode
+                            ? null
+                            : () => _createJoinCode(familyId),
+                        icon: _creatingJoinCode
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(
+                          joinCode == null
+                              ? loc.translate('create_join_code_1h')
+                              : loc.translate('create_new_join_code'),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 42),
+                        ),
                       ),
                     ],
                   ),
                 ),
+              ),
               const SizedBox(height: 8),
               SectionHeader(title: loc.translate('pending_join_requests')),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -425,7 +507,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                                   ),
                                 ),
                                 title: Text(label),
-                                subtitle: Text('${m.role} · ${m.status}'),
+                                subtitle: Text('${m.role} Â· ${m.status}'),
                                 trailing: m.role == 'admin'
                                     ? Chip(
                                         label: Text(loc.translate('admin_badge')),

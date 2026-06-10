@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../localization/app_localization.dart';
 import '../../theme/app_theme.dart';
 import '../../models/camera_model.dart' as fs;
 import '../../widgets/common_widgets.dart';
 import '../../providers/auth_provider.dart';
+import '../../repositories/chip_binding_repository.dart';
 import '../../repositories/camera_repository.dart';
 import '../../utils/tenda_camera_helper.dart';
 import 'admin_camera_live_screen.dart';
@@ -15,7 +17,11 @@ class CameraConfigScreen extends StatelessWidget {
 
   const CameraConfigScreen({super.key, this.embedded = false});
 
-  void _showAddCameraSheet(BuildContext context, String familyId) {
+  void _showAddCameraSheet(
+    BuildContext context,
+    String familyId,
+    String chipId,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -25,7 +31,29 @@ class CameraConfigScreen extends StatelessWidget {
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: _AddCameraSheet(familyId: familyId),
+        child: _AddCameraSheet(familyId: familyId, chipId: chipId),
+      ),
+    );
+  }
+
+  void _showBindChipSheet(
+    BuildContext context,
+    String familyId,
+    ChipBindingRepository chipBindingRepo,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: _BindChipSheet(
+          familyId: familyId,
+          chipBindingRepo: chipBindingRepo,
+        ),
       ),
     );
   }
@@ -35,6 +63,7 @@ class CameraConfigScreen extends StatelessWidget {
     final loc = AppLocalizations.of(context);
     final familyId = context.watch<AuthProvider>().user?.familyId;
     final cameraRepo = CameraRepository();
+    final chipBindingRepo = ChipBindingRepository();
 
     final body = familyId == null || familyId.isEmpty
           ? Center(
@@ -55,17 +84,56 @@ class CameraConfigScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: cameras.length >= 4
-                            ? null
-                            : () => _showAddCameraSheet(context, familyId),
-                        icon: const Icon(Icons.add_rounded, size: 20),
-                        label: Text(cameras.length >= 4
-                            ? loc.translate('camera_limit_reached')
-                            : loc.translate('add_new_camera')),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 46),
-                        ),
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>?>(
+                        stream: chipBindingRepo.watchFamilyChip(familyId),
+                        builder: (context, chipSnap) {
+                          final chipDoc = chipSnap.data;
+                          final chipId =
+                              (chipDoc?.data()?['chipId'] as String?)?.trim();
+                          final hasChip = chipId != null && chipId.isNotEmpty;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _ChipBindingCard(
+                                chipId: chipId,
+                                onBind: () => _showBindChipSheet(
+                                  context,
+                                  familyId,
+                                  chipBindingRepo,
+                                ),
+                                onUnbind: hasChip
+                                    ? () => chipBindingRepo
+                                        .unbindChipFromFamily(familyId)
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: !hasChip || cameras.length >= 4
+                                    ? null
+                                    : () => _showAddCameraSheet(
+                                          context,
+                                          familyId,
+                                          chipId,
+                                        ),
+                                icon: const Icon(Icons.add_rounded, size: 20),
+                                label: Text(
+                                  !hasChip
+                                      ? loc.translate('bind_chip_first')
+                                      : cameras.length >= 4
+                                          ? loc.translate(
+                                              'camera_limit_reached',
+                                            )
+                                          : loc.translate('add_new_camera'),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize:
+                                      const Size(double.infinity, 46),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -192,6 +260,204 @@ class _MiniStat extends StatelessWidget {
             label,
             style: const TextStyle(fontSize: 9.5, color: AppTheme.primary),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChipBindingCard extends StatelessWidget {
+  final String? chipId;
+  final VoidCallback onBind;
+  final VoidCallback? onUnbind;
+
+  const _ChipBindingCard({
+    required this.chipId,
+    required this.onBind,
+    required this.onUnbind,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    final hasChip = chipId != null && chipId!.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: hasChip ? AppTheme.surface2 : const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasChip ? AppTheme.primaryContainer : AppTheme.warningColor,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: (hasChip ? AppTheme.primary : AppTheme.warningColor)
+                  .withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.memory_rounded,
+              color: hasChip ? AppTheme.primary : AppTheme.warningColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  loc.translate('family_chip'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasChip ? chipId! : loc.translate('no_chip_bound'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: hasChip
+                        ? AppTheme.textSecondary
+                        : AppTheme.warningColor,
+                    fontFamily: hasChip ? 'monospace' : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onBind,
+            child: Text(
+              loc.translate(hasChip ? 'change_chip' : 'bind_chip'),
+            ),
+          ),
+          if (hasChip)
+            IconButton(
+              icon: const Icon(Icons.link_off_rounded),
+              color: AppTheme.errorColor,
+              onPressed: onUnbind,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BindChipSheet extends StatefulWidget {
+  final String familyId;
+  final ChipBindingRepository chipBindingRepo;
+
+  const _BindChipSheet({
+    required this.familyId,
+    required this.chipBindingRepo,
+  });
+
+  @override
+  State<_BindChipSheet> createState() => _BindChipSheetState();
+}
+
+class _BindChipSheetState extends State<_BindChipSheet> {
+  final _chipCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _chipCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final loc = AppLocalizations.of(context);
+    final chipId = _chipCtrl.text.trim();
+    if (chipId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(loc.translate('chip_id_required'))),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await widget.chipBindingRepo.bindChipToFamily(
+        familyId: widget.familyId,
+        chipId: chipId,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(loc.translate('chip_bound'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${loc.translate('error_prefix')}: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Text(
+            loc.translate('bind_chip'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            loc.translate('bind_chip_help'),
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _chipCtrl,
+            decoration: InputDecoration(
+              labelText: loc.translate('chip_id_label'),
+              hintText: 'chip_living_room_01',
+              prefixIcon: const Icon(Icons.memory_outlined),
+            ),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.link_rounded),
+            label: Text(loc.translate('bind_chip')),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 46),
+            ),
           ),
         ],
       ),
@@ -456,8 +722,12 @@ class _CpuLoadBar extends StatelessWidget {
 
 class _AddCameraSheet extends StatefulWidget {
   final String familyId;
+  final String chipId;
 
-  const _AddCameraSheet({required this.familyId});
+  const _AddCameraSheet({
+    required this.familyId,
+    required this.chipId,
+  });
 
   @override
   State<_AddCameraSheet> createState() => _AddCameraSheetState();
@@ -469,7 +739,6 @@ class _AddCameraSheetState extends State<_AddCameraSheet> {
   int _mode = _modeTenda;
   String _cameraType = 'tenda_cp6';
   final _nameCtrl = TextEditingController();
-  final _chipCtrl = TextEditingController();
   final _ipCtrl = TextEditingController(text: '192.168.0.102');
   final _relayIdCtrl = TextEditingController();
   bool _saving = false;
@@ -497,7 +766,6 @@ class _AddCameraSheetState extends State<_AddCameraSheet> {
   void dispose() {
     _ipCtrl.removeListener(_syncTendaFields);
     _nameCtrl.dispose();
-    _chipCtrl.dispose();
     _ipCtrl.dispose();
     _relayIdCtrl.dispose();
     super.dispose();
@@ -505,7 +773,6 @@ class _AddCameraSheetState extends State<_AddCameraSheet> {
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
-    final chipId = _chipCtrl.text.trim();
     final relayCameraId = _relayIdCtrl.text.trim();
     if (name.isEmpty || relayCameraId.isEmpty) return;
 
@@ -531,12 +798,13 @@ class _AddCameraSheetState extends State<_AddCameraSheet> {
     setState(() => _saving = true);
     final id = await CameraRepository().addCamera(
       widget.familyId,
-      chipId.isNotEmpty ? chipId : relayCameraId,
+      widget.chipId,
       name,
       relayCameraId: relayCameraId,
       cameraIp: cameraIp,
       rtspMainUrl: rtspMain,
       rtspSubUrl: rtspSub,
+      cameraType: _cameraType,
     );
     if (!mounted) return;
     setState(() => _saving = false);
